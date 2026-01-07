@@ -279,22 +279,68 @@ void *handle_client(void *arg) {
     }
 
     /* Authentication successful */
-    char *auth_success = "Authentication successful! Welcome to NetChat!\n";
-    send(client_fd, auth_success, strlen(auth_success), 0);
-    
-    /* Check if this was a new registration */
-    char welcome_msg[BUFFER_SIZE];
-    snprintf(welcome_msg, sizeof(welcome_msg), 
-             "Note: Your account has been saved. Use the same password next time.\n");
-    send(client_fd, welcome_msg, strlen(welcome_msg), 0);
+    char welcome_banner[BUFFER_SIZE * 2];
+    snprintf(welcome_banner, sizeof(welcome_banner),
+        "\n"
+        "╔════════════════════════════════════════════════════════════════╗\n"
+        "║                  🎉 WELCOME TO NETCHAT! 🎉                    ║\n"
+        "╚════════════════════════════════════════════════════════════════╝\n"
+        "\n"
+        "✅ Authentication successful!\n"
+        "📝 Your account has been saved for future logins.\n"
+        "🏠 You are now in room: #general\n"
+        "\n"
+        "╔════════════════════════════════════════════════════════════════╗\n"
+        "║                     AVAILABLE COMMANDS                         ║\n"
+        "╠════════════════════════════════════════════════════════════════╣\n"
+        "║                                                                ║\n"
+        "║  💬 MESSAGING:                                                 ║\n"
+        "║     • Type normally to send message to current room           ║\n"
+        "║     • /pm <user> <message>  - Send private message            ║\n"
+        "║                                                                ║\n"
+        "║  🏢 ROOMS:                                                     ║\n"
+        "║     • /room                 - Show current room               ║\n"
+        "║     • /join <roomname>      - Join/create a room              ║\n"
+        "║     • /rooms                - List all active rooms           ║\n"
+        "║  join notification to room */
+    snprintf(message, sizeof(message), "[Server]: %s has joined #general\n", username);
+    printf("%s", message);
+    log_message(message);
+    broadcast_room(message, -1, "general");  // Send to all in general room
 
-    /* Store user info in client structure */
-    pthread_mutex_lock(&lock);
-    for (int i = 0; i < client_count; i++) {
-        if (clients[i].fd == client_fd) {
-            strncpy(clients[i].username, username, sizeof(clients[i].username) - 1);
-            strncpy(clients[i].password, password, sizeof(clients[i].password) - 1);
-            clients[i].authenticated = 1;
+    /* Handle messages and commands */
+    while ((bytes_read = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
+        buffer[bytes_read] = '\0';
+        
+        /* Check for /help command */
+        if (strncmp(buffer, "/help", 5) == 0 && (buffer[5] == '\n' || buffer[5] == '\0')) {
+            char help_menu[BUFFER_SIZE * 2];
+            snprintf(help_menu, sizeof(help_menu),
+                "\n"
+                "╔════════════════════════════════════════════════════════════════╗\n"
+                "║                     AVAILABLE COMMANDS                         ║\n"
+                "╠════════════════════════════════════════════════════════════════╣\n"
+                "║                                                                ║\n"
+                "║  💬 MESSAGING:                                                 ║\n"
+                "║     • Type normally to send message to current room           ║\n"
+                "║     • /pm <user> <message>  - Send private message            ║\n"
+                "║                                                                ║\n"
+                "║  🏢 ROOMS:                                                     ║\n"
+                "║     • /room                 - Show current room               ║\n"
+                "║     • /join <roomname>      - Join/create a room              ║\n"
+                "║     • /rooms                - List all active rooms           ║\n"
+                "║                                                                ║\n"
+                "║  👥 USERS:                                                     ║\n"
+                "║     • /users                - List users in current room      ║\n"
+                "║                                                                ║\n"
+                "║  ℹ️  HELP:                                                      ║\n"
+                "║     • /help                 - Show this menu again            ║\n"
+                "║                                                                ║\n"
+                "╚════════════════════════════════════════════════════════════════╝\n"
+                "\n");
+            send(client_fd, help_menu, strlen(help_menu), 0);
+            continue;
+        }ed = 1;
             strcpy(clients[i].room, "general");  // Default room
             client_index = i;
             break;
