@@ -219,37 +219,32 @@ void *handle_client(void *arg) {
     int bytes_read;
     int client_index = -1;
 
-    /* Step 1: Receive username */
-    bytes_read = recv(client_fd, username, sizeof(username), 0);
-    if (bytes_read <= 0) {
-        close(client_fd);
-        return NULL;
+    /* Step 1: Receive username (read until newline) */
+    int idx = 0;
+    char c;
+    while (idx < (int)sizeof(username) - 1) {
+        bytes_read = recv(client_fd, &c, 1, 0);
+        if (bytes_read <= 0) {
+            close(client_fd);
+            return NULL;
+        }
+        if (c == '\n') break;
+        username[idx++] = c;
     }
-    username[bytes_read] = '\0';
-    username[strcspn(username, "\n\r")] = 0;  // Remove newlines
-    
-    /* Trim spaces */
-    char *username_start = username;
-    while (*username_start == ' ') username_start++;
-    if (username_start != username) {
-        memmove(username, username_start, strlen(username_start) + 1);
-    }
+    username[idx] = '\0';
 
-    /* Step 2: Receive password */
-    bytes_read = recv(client_fd, password, sizeof(password), 0);
-    if (bytes_read <= 0) {
-        close(client_fd);
-        return NULL;
+    /* Step 2: Receive password (read until newline) */
+    idx = 0;
+    while (idx < (int)sizeof(password) - 1) {
+        bytes_read = recv(client_fd, &c, 1, 0);
+        if (bytes_read <= 0) {
+            close(client_fd);
+            return NULL;
+        }
+        if (c == '\n') break;
+        password[idx++] = c;
     }
-    password[bytes_read] = '\0';
-    password[strcspn(password, "\n\r")] = 0;  // Remove newlines
-    
-    /* Trim spaces */
-    char *password_start = password;
-    while (*password_start == ' ') password_start++;
-    if (password_start != password) {
-        memmove(password, password_start, strlen(password_start) + 1);
-    }
+    password[idx] = '\0';
     
     /* Validate inputs */
     if (strlen(username) == 0 || strlen(password) == 0) {

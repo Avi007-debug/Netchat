@@ -59,8 +59,12 @@ int main() {
     printf("Connected to server...\n");
     
     /* Send username and password for authentication */
-    send(sockfd, username, strlen(username), 0);
-    send(sockfd, password, strlen(password), 0);
+    char auth_username[BUFFER_SIZE];
+    char auth_password[BUFFER_SIZE];
+    snprintf(auth_username, sizeof(auth_username), "%s\n", username);
+    snprintf(auth_password, sizeof(auth_password), "%s\n", password);
+    send(sockfd, auth_username, strlen(auth_username), 0);
+    send(sockfd, auth_password, strlen(auth_password), 0);
 
     pthread_create(&recv_thread, NULL, receive_messages, NULL);
 
