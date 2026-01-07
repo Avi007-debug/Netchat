@@ -114,16 +114,30 @@ int register_user(const char *username, const char *password) {
     
     strncpy(clean_user, username, sizeof(clean_user) - 1);
     clean_user[sizeof(clean_user) - 1] = '\0';
-    clean_user[strcspn(clean_user, "\n\r: ")] = '\0';  // Remove newlines, colons, spaces
+    clean_user[strcspn(clean_user, "\n\r:")] = '\0';  // Remove newlines and colons only
     
     strncpy(clean_pass, password, sizeof(clean_pass) - 1);
     clean_pass[sizeof(clean_pass) - 1] = '\0';
-    clean_pass[strcspn(clean_pass, "\n\r: ")] = '\0';  // Remove newlines, colons, spaces
+    clean_pass[strcspn(clean_pass, "\n\r:")] = '\0';  // Remove newlines and colons only
     
     /* Validate cleaned inputs */
     if (strlen(clean_user) == 0 || strlen(clean_pass) == 0) {
-        printf("[Server]: Invalid username or password format\n");
+        printf("[Server]: Invalid username or password format (empty after cleaning)\n");
         return 0;
+    }
+    
+    /* Check for invalid characters */
+    for (int i = 0; clean_user[i]; i++) {
+        if (clean_user[i] == ':') {
+            printf("[Server]: Username cannot contain ':' character\n");
+            return 0;
+        }
+    }
+    for (int i = 0; clean_pass[i]; i++) {
+        if (clean_pass[i] == ':') {
+            printf("[Server]: Password cannot contain ':' character\n");
+            return 0;
+        }
     }
     
     FILE *file = fopen(USERS_FILE, "a");
@@ -138,25 +152,13 @@ int register_user(const char *username, const char *password) {
     
     char log_msg[BUFFER_SIZE];
     snprintf(log_msg, sizeof(log_msg), "[Server]: New user registered: %s\n", clean_user);
-    log_message(log_msg);
-    printf("%s", log_msg);
-    
-    return 1;
-}
-
-/* Validate user credentials - file-based authentication */
-int authenticate_user(const char *username, const char *password) {
-    /* Clean inputs */
-    char clean_user[50];
-    char clean_pass[50];
-    
-    strncpy(clean_user, username, sizeof(clean_user) - 1);
-    clean_user[sizeof(clean_user) - 1] = '\0';
-    clean_user[strcspn(clean_user, "\n\r: ")] = '\0';
+    log_message(log_msg);")] = '\0';
     
     strncpy(clean_pass, password, sizeof(clean_pass) - 1);
     clean_pass[sizeof(clean_pass) - 1] = '\0';
-    clean_pass[strcspn(clean_pass, "\n\r: ")] = '\0';
+    clean_pass[strcspn(clean_pass, "\n\r:")] = '\0';
+    
+    printf("[Server]: Authenticating user='%s' with password='%s'\n", clean_user, clean_pass);
     
     FILE *file = fopen(USERS_FILE, "r");
     
@@ -173,6 +175,24 @@ int authenticate_user(const char *username, const char *password) {
     
     /* Search for username in file */
     while (fgets(line, sizeof(line), file)) {
+        /* Remove trailing newline */
+        line[strcspn(line, "\n\r")] = '\0';
+        
+        /* Parse line: username:password */
+        if (sscanf(line, "%49[^:]:%49s", stored_user, stored_pass) == 2) {
+            printf("[Server]: Checking against stored user='%s' pass='%s'\n", stored_user, stored_pass);
+            
+            if (strcmp(stored_user, clean_user) == 0) {
+                user_exists = 1;
+                /* Username found - verify password */
+                if (strcmp(stored_pass, clean_pass) == 0) {
+                    fclose(file);
+                    printf("[Server]: Authentication successful for user: %s\n", clean_user);
+                    return 1;  // Authentication successful
+                } else {
+                    fclose(file);
+                    printf("[Server]: Wrong password for user: %s\n", clean_user);
+                    return 0;  // Wrong password - do NOT register
         /* Remove trailing newline */
         line[strcspn(line, "\n\r")] = '\0';
         
@@ -246,7 +266,14 @@ void *handle_client(void *arg) {
         return NULL;
     }
     username[bytes_read] = '\0';
-    username[strcspn(username, "\n")] = 0;
+    username[strcspn(username, "\n\r")] = 0;  // Remove newlines
+    
+    /* Trim spaces */
+    char *username_start = username;
+    while (*username_start == ' ') username_start++;
+    if (username_start != username) {
+        memmove(username, username_start, strlen(username_start) + 1);
+    }
 
     /* Step 2: Receive password */
     bytes_read = recv(client_fd, password, sizeof(password), 0);
@@ -255,7 +282,34 @@ void *handle_client(void *arg) {
         return NULL;
     }
     password[bytes_read] = '\0';
-    password[strcspn(password, "\n")] = 0;
+    password[strcspn(password, "\n\r")] = 0;  // Remove newlines
+    
+    /* Trim spaces */
+    char *password_start = password;
+    while (*password_start == ' ') password_start++;
+    if (password_start != password) {
+        memmove(password, password_start, strlen(password_start) + 1);
+    }
+    
+    /* Validate inputs */
+    if (strlen(username) == 0 || strlen(password) == 0) {
+        char *err = "Error: Username and password cannot be empty.\n";
+        send(client_fd, err, strlen(err), 0);
+        close(client_fd);
+        
+        pthread_mutex_lock(&lock);
+        for (int i = 0; i < client_count; i++) {
+            if (clients[i].fd == client_fd) {
+                for (int j = i; j < client_count - 1; j++) {
+                    clients[j] = clients[j + 1];
+                }
+                client_count--;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&lock);
+        return NULL;
+    }
 
     /* Step 3: Authenticate */
     if (!authenticate_user(username, password)) {
