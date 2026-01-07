@@ -11,6 +11,7 @@
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 #define LOG_FILE "chat.log"
+#define USERS_FILE "users.txt"
 #define MAX_ROOMS 5
 #define ROOM_NAME_LEN 30
 
@@ -104,14 +105,67 @@ int send_private_message(const char *target_username, const char *message, const
     pthread_mutex_unlock(&lock);
     return found;
 }
+Register new user - add to users.txt */
+int register_user(const char *username, const char *password) {
+    FILE *file = fopen(USERS_FILE, "a");
+    if (!file) {
+        perror("Failed to open users file for writing");
+        return 0;
+    }
+    
+    fprintf(file, "%s:%s\n", username, password);
+    fflush(file);
+    fclose(file);
+    
+    char log_msg[BUFFER_SIZE];
+    snprintf(log_msg, sizeof(log_msg), "[Server]: New user registered: %s\n", username);
+    log_message(log_msg);
+    printf("%s", log_msg);
+    
+    return 1;
+}
 
-/* Validate user credentials - simple hardcoded authentication */
+/* Validate user credentials - file-based authentication */
 int authenticate_user(const char *username, const char *password) {
-    /* Simple authentication - in real app, use database */
-    /* For demo: accept any username with password "chat123" */
-    (void)username;  // Username not checked in this simple implementation
-    if (strcmp(password, "chat123") == 0) {
-        return 1;
+    FILE *file = fopen(USERS_FILE, "r");
+    
+    /* If users.txt doesn't exist, register first user */
+    if (!file) {
+        printf("[Server]: users.txt not found, registering new user: %s\n", username);
+        return register_user(username, password);
+    }
+    
+    char line[256];
+    char stored_user[50];
+    char stored_pass[50];
+    int user_exists = 0;
+    
+    /* Search for username in file */
+    while (fgets(line, sizeof(line), file)) {
+        /* Parse line: username:password */
+        if (sscanf(line, "%49[^:]:%49s", stored_user, stored_pass) == 2) {
+            if (strcmp(stored_user, username) == 0) {
+                user_exists = 1;
+                /* Username found - verify password */
+                if (strcmp(stored_pass, password) == 0) {
+                    fclose(file);
+                    return 1;  // Authentication successful
+                } else {
+                    fclose(file);
+                    return 0;  // Wrong password
+                }
+            }
+        }
+    }
+    
+    fclose(file);
+    
+    /* Username not found - register new user */
+    if (!user_exists) {
+        printf("[Server]: New user detected: %s, registering...\n", username);
+        return register_user(username, password);
+    }
+       return 1;
     }
     return 0;
 }
@@ -194,6 +248,12 @@ void *handle_client(void *arg) {
     /* Authentication successful */
     char *auth_success = "Authentication successful! Welcome to NetChat!\n";
     send(client_fd, auth_success, strlen(auth_success), 0);
+    
+    /* Check if this was a new registration */
+    char welcome_msg[BUFFER_SIZE];
+    snprintf(welcome_msg, sizeof(welcome_msg), 
+             "Note: Your account has been saved. Use the same password next time.\n");
+    send(client_fd, welcome_msg, strlen(welcome_msg), 0);
 
     /* Store user info in client structure */
     pthread_mutex_lock(&lock);

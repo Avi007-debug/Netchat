@@ -1,0 +1,18 @@
+# Compiled binaries
+server/server
+client/client
+
+# Runtime generated files
+chat.log
+users.txt
+
+# System files
+*.exe
+*.o
+*.out
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+*.swp
