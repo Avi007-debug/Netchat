@@ -105,7 +105,8 @@ int send_private_message(const char *target_username, const char *message, const
     pthread_mutex_unlock(&lock);
     return found;
 }
-Register new user - add to users.txt */
+
+/* Register new user - add to users.txt */
 int register_user(const char *username, const char *password) {
     FILE *file = fopen(USERS_FILE, "a");
     if (!file) {
@@ -165,8 +166,7 @@ int authenticate_user(const char *username, const char *password) {
         printf("[Server]: New user detected: %s, registering...\n", username);
         return register_user(username, password);
     }
-       return 1;
-    }
+    
     return 0;
 }
 
