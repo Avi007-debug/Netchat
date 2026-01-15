@@ -538,7 +538,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+// Start server (use server.listen, not app.listen, for Socket.IO to work)
+server.listen(PORT, () => {
   console.log(`\n🚀 NetChat Server is running on http://localhost:${PORT}`);
   console.log(`📝 Register: POST /api/auth/register`);
   console.log(`🔑 Login: POST /api/auth/login`);
