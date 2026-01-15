@@ -146,6 +146,59 @@ body {
     background: #667eea;
     transform: scale(1.05);
 }
+ 
+/* Unread badge on PM button */
+.pm-btn.pm-unread {
+    position: relative;
+}
+.pm-btn.pm-unread::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 10px;
+    height: 10px;
+    background: #e74c3c;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(231,76,60,0.15);
+}
+
+/* Toast notifications */
+.netchat-toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: rgba(0,0,0,0.85);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 8px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    z-index: 1200;
+}
+.netchat-toast.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+/* Toast internals */
+.netchat-toast .toast-text {
+    display: inline-block;
+    max-width: 380px;
+    margin-right: 8px;
+}
+.netchat-toast .toast-dismiss {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.9);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+}
+.netchat-toast .toast-dismiss:hover {
+    background: rgba(255,255,255,0.06);
+}
 
 .new-room-input {
     width: 100%;

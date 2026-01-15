@@ -34,6 +34,8 @@ let typingUsers = [];
 let typingTimeout = null;
 let currentPMUser = null;
 let pmMessagesMap = new Map(); // Store PM history
+// Persisted unread counts: { username: number }
+let unreadCounts = {};
 
 // Initialize
 window.addEventListener('load', () => {
@@ -49,6 +51,14 @@ window.addEventListener('load', () => {
 
     currentUser = JSON.parse(user);
     currentUserEl.textContent = `Welcome, ${currentUser.username}!`;
+
+    // Load persisted unread counts
+    try {
+        const raw = localStorage.getItem('netchat_unread');
+        unreadCounts = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+        unreadCounts = {};
+    }
 
     // Get available rooms
     socket.emit('rooms:get');
@@ -80,22 +90,31 @@ socket.on('session:duplicate', (data) => {
     window.location.href = '/';
 });
 
-// Private Message Received
+// Private Message Received (single consolidated handler)
 socket.on('pm:received', (data) => {
     const { from, message, timestamp } = data;
-    
-    // Show notification
+
+    // Browser notification
     showNotification(`New PM from ${from}`);
-    
-    // Store PM
-    if (!pmMessagesMap.has(from)) {
-        pmMessagesMap.set(from, []);
-    }
+
+    // Store PM locally
+    if (!pmMessagesMap.has(from)) pmMessagesMap.set(from, []);
     pmMessagesMap.get(from).push({ from, message, timestamp, type: 'received' });
-    
-    // If PM window is open with this user, add to display
+
+    // If PM chat is open with this user, show immediately and do not mark unread
     if (currentPMUser === from) {
         addPMToUI(from, message, timestamp, 'received');
+    } else {
+        // Increment unread count and persist
+        unreadCounts[from] = (unreadCounts[from] || 0) + 1;
+        try { localStorage.setItem('netchat_unread', JSON.stringify(unreadCounts)); } catch (e) {}
+
+        // Add unread badge to PM button next to user
+        const userBtn = document.querySelector(`.user-item[data-username="${from}"] .pm-btn`);
+        if (userBtn) userBtn.classList.add('pm-unread');
+
+        // Show in-page toast (truncated)
+        showToast(`PM from ${from}: ${message}`);
     }
 });
 
@@ -291,6 +310,7 @@ function updateUsersList() {
     connectedUsers.forEach(user => {
         const userEl = document.createElement('div');
         userEl.className = 'user-item';
+        userEl.dataset.username = user.username;
         const statusDot = user.id === currentUser.id ? '🟢' : '🔵';
         userEl.innerHTML = `
             <div class="user-info">
@@ -303,10 +323,18 @@ function updateUsersList() {
         // Add click handler for PM button
         if (user.username !== currentUser.username) {
             const pmBtn = userEl.querySelector('.pm-btn');
-            pmBtn.onclick = (e) => {
-                e.stopPropagation();
-                openPMChat(user.username);
-            };
+            if (pmBtn) {
+                pmBtn.dataset.username = user.username;
+                pmBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    openPMChat(user.username);
+                };
+
+                // Apply unread badge if persisted count exists
+                if (unreadCounts[user.username] && unreadCounts[user.username] > 0) {
+                    pmBtn.classList.add('pm-unread');
+                }
+            }
         }
         
         usersList.appendChild(userEl);
@@ -436,6 +464,14 @@ function openPMChat(username) {
     // Load PM history
     loadPMHistory(username);
     pmInput.focus();
+    // Clear unread badge on PM button
+    const userBtn = document.querySelector(`.user-item[data-username="${username}"] .pm-btn`);
+    if (userBtn) userBtn.classList.remove('pm-unread');
+    // Clear persisted unread count for this user
+    if (unreadCounts[username]) {
+        unreadCounts[username] = 0;
+        try { localStorage.setItem('netchat_unread', JSON.stringify(unreadCounts)); } catch (e) {}
+    }
 }
 
 function closePMChat() {
@@ -501,6 +537,40 @@ function showNotification(message) {
     if (Notification.permission === 'granted') {
         new Notification('NetChat', { body: message });
     }
+}
+
+// In-page toast notification
+function showToast(text) {
+    // Limit length
+    const MAX = 120;
+    let truncated = text;
+    if (text.length > MAX) truncated = text.slice(0, MAX - 1) + '…';
+
+    const toast = document.createElement('div');
+    toast.className = 'netchat-toast';
+    toast.innerHTML = `
+        <span class="toast-text">${escapeHTML(truncated)}</span>
+        <button class="toast-dismiss" aria-label="Dismiss">✕</button>
+    `;
+
+    document.body.appendChild(toast);
+    // Trigger show (allow CSS transition)
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    const removeToast = () => {
+        toast.classList.remove('show');
+        setTimeout(() => { try { toast.remove(); } catch(e){} }, 300);
+    };
+
+    // Dismiss button
+    const dbtn = toast.querySelector('.toast-dismiss');
+    if (dbtn) dbtn.addEventListener('click', (e) => { e.stopPropagation(); removeToast(); });
+
+    // Auto remove after 6s
+    const timer = setTimeout(removeToast, 6000);
+
+    // Pause auto-hide on hover
+    toast.addEventListener('mouseenter', () => clearTimeout(timer));
 }
 
 // PM Modal Event Listeners
