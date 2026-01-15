@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetChat - Real-time Chat</title>
+    <link rel="stylesheet" href="chat.css">
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="header-content">
+                <h1>💬 NetChat Live</h1>
+                <p id="currentUser" class="current-user">Loading...</p>
+            </div>
+            <button id="logoutBtn" class="logout-btn">Logout</button>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="chat-main">
+            <!-- Sidebar -->
+            <aside class="chat-sidebar">
+                <!-- Rooms Section -->
+                <div class="sidebar-section">
+                    <h3>Chat Rooms</h3>
+                    <div class="rooms-list" id="roomsList">
+                        <div class="loading">Loading rooms...</div>
+                    </div>
+                    <input 
+                        type="text" 
+                        id="newRoomInput" 
+                        placeholder="Room name..."
+                        class="new-room-input"
+                    >
+                    <button id="createRoomBtn" class="create-room-btn">Join/Create</button>
+                </div>
+
+                <!-- Users Section -->
+                <div class="sidebar-section">
+                    <h3>Online Users</h3>
+                    <div class="users-list" id="usersList">
+                        <div class="loading">Loading users...</div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Chat Area -->
+            <div class="chat-area">
+                <!-- Room Info -->
+                <div class="room-info" id="roomInfo">
+                    <p>Select a room to start chatting</p>
+                </div>
+
+                <!-- Messages -->
+                <div class="messages-container" id="messagesContainer">
+                    <div class="no-messages">
+                        <p>No messages yet. Say something!</p>
+                    </div>
+                </div>
+
+                <!-- Typing Indicator -->
+                <div class="typing-indicator" id="typingIndicator">
+                    <span id="typingText"></span>
+                </div>
+
+                <!-- Message Input -->
+                <div class="message-input-area">
+                    <input 
+                        type="text" 
+                        id="messageInput" 
+                        placeholder="Type your message..." 
+                        class="message-input"
+                        disabled
+                    >
+                    <button id="sendBtn" class="send-btn" disabled>Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Socket.io library -->
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="chat.js"></script>
+</body>
+</html>
