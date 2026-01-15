@@ -550,24 +550,9 @@ io.on('connection', (socket) => {
 
       // Remove user from connected users and active sessions
       connectedUsers.delete(socket.userId);
-      activeSession
-        io.to(user.room).emit('message:new', {
-          type: 'system',
-          username: 'System',
-          message: `${socket.username} disconnected`,
-          timestamp: new Date().toISOString(),
-          room: user.room
-        });
+      activeSessions.delete(socket.userId);
 
-        io.to(user.room).emit('room:info', {
-          name: user.room,
-          users: room.users,
-          messageCount: room.messages.length
-        });
-      }
-
-      // Remove user from connected users
-      connectedUsers.delete(socket.userId);
+      // Notify all clients with updated user list
       io.emit('users:update', Array.from(connectedUsers.values()));
 
       console.log(`👤 User disconnected: ${socket.username}`);
