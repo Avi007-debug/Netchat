@@ -486,14 +486,20 @@ io.on('connection', (socket) => {
     const user = connectedUsers.get(socket.userId);
     if (user && user.room) {
       socket.to(user.room).emit('user:typing', {
-        usePrivate Message =====
+        username: socket.username,
+        room: user.room
+      });
+    }
+  });
+
+  // ===== Private Message =====
   socket.on('pm:send', (data) => {
     const { to, message } = data;
-    
+
     // Find target user
     let targetUserId = null;
     let targetSocketId = null;
-    
+
     for (const [userId, userData] of connectedUsers.entries()) {
       if (userData.username === to) {
         targetUserId = userId;
