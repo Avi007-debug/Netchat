@@ -5,6 +5,25 @@
     "email": "test@gmail.com",
     "password": "$2a$10$Vfl1/G/Y2RJNKzeSF53GhugXdMNuTJKbRjvmsFNZvRk0E.Dht9TlW",
     "createdAt": "2026-01-15T18:50:54.596Z",
-    "status": "offline"
+    "status": "online",
+    "lastLogin": "2026-01-15T20:07:53.926Z"
+  },
+  {
+    "id": "1768505724940",
+    "username": "test1",
+    "email": "test1@gmail.com",
+    "password": "$2a$10$8ub28WUw3I/Gf6ED3K2WjuNsxdc1teKbJ3q191Ws8Z1zWeME/YHDW",
+    "createdAt": "2026-01-15T19:35:24.940Z",
+    "status": "offline",
+    "lastLogin": "2026-01-15T20:17:55.422Z"
+  },
+  {
+    "id": "1768505948808",
+    "username": "test2",
+    "email": "test2@gmail.com",
+    "password": "$2a$10$PRwDIKrnskl0nlCX0g1RwOK5DgIPhFbFYm4D5ek9NEPEWGiDPLwA6",
+    "createdAt": "2026-01-15T19:39:08.808Z",
+    "status": "online",
+    "lastLogin": "2026-01-15T20:04:33.308Z"
   }
 ]
