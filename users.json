@@ -25,5 +25,23 @@
     "createdAt": "2026-01-15T19:39:08.808Z",
     "status": "online",
     "lastLogin": "2026-01-15T20:04:33.308Z"
+  },
+  {
+    "id": "1769201531619",
+    "username": "avi",
+    "email": "avi@gmail.com",
+    "password": "$2a$10$/IAcTgmUnEY6iERThXwScO4JYPdF/Xlm1vcM6fA2G3henpb/lcwpS",
+    "createdAt": "2026-01-23T20:52:11.619Z",
+    "status": "online",
+    "lastLogin": "2026-01-23T20:52:36.252Z"
+  },
+  {
+    "id": "1769201652875",
+    "username": "giri",
+    "email": "giri@gmail.com",
+    "password": "$2a$10$JXn45DTfHV9cBWscklb5TO0ykj0c3dOO6Lc04S71/3xiJoOClYt9u",
+    "createdAt": "2026-01-23T20:54:12.875Z",
+    "status": "online",
+    "lastLogin": "2026-01-23T20:54:43.789Z"
   }
 ]
