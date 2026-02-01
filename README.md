@@ -28,6 +28,14 @@ A dual-mode chat application demonstrating operating system concepts with both C
 - ✅ **WebSocket**: Real-time bidirectional communication (Socket.IO)
 - ✅ **JWT Authentication**: Secure token-based auth with 24hr expiry
 - ✅ **RESTful API**: Express.js backend with input validation
+- ✅ **Modern UI**: Responsive HTML/CSS/JS frontend with gradient design
+- ✅ **Bcrypt Hashing**: Secure password storage (10 salt rounds)
+- ✅ **Image Sharing**: Upload and share images (JPEG, PNG, GIF, WebP up to 5MB)
+- ✅ **Private Messaging**: Click-to-chat modal with message history and notifications
+- ✅ **Message Encryption**: Client-side toggle for AES-256-CBC encrypted messages
+- ✅ **Session Management**: Anti-hijacking duplicate login prevention
+- ✅ **Chat Rooms**: Create and join unlimited rooms
+- ✅ **Typing Indicators**: Real-time typing status
 - ✅ **Modern UI**: Responsive HTML/CSS/JS frontend
 - ✅ **Bcrypt Hashing**: Secure password storage (10 rounds)
 - ✅ **Image Sharing**: Upload/share images (JPEG, PNG, GIF, WebP up to 5MB)
@@ -150,15 +158,19 @@ This project demonstrates essential operating system concepts:
 
 | Command | Description |
 |---------|-------------|
-| `make all` | Compile both server and client |
-| `make server` | Compile server only |
+| `make all` | Compile standard server and client (default) |
+| `make server` | Compile standard server only |
 | `make client` | Compile client only |
-| `make run-server` | Start C server (port 8080) |
-| `make run-client` | Start C client |
-| `make web` | Start Node.js server (port 3000) |
-| `make clean` | Remove binaries and logs |
-| `make reset` | Clean and rebuild |
-| `make help` | Show all commands |
+| `make enhanced` | Compile enhanced server with OS features |
+| `make debug` | Compile enhanced server with debug symbols |
+| `make run-server` | Compile and run standard C server (port 8080) |
+| `make run-enhanced` | Compile and run enhanced C server (port 5555) |
+| `make run-client` | Compile and run C client |
+| `make web` | Start Node.js web server (port 3000) |
+| `make install` | Install enhanced server to `/usr/local/bin` |
+| `make clean` | Remove all binaries, logs, and temp files |
+| `make reset` | Clean and rebuild all targets |
+| `make help` | Show detailed help with examples |
 
 ---
 
@@ -187,9 +199,10 @@ This project demonstrates essential operating system concepts:
 - Register two users
 - Join same room
 - Send text messages
-- Share an image
+- **Toggle encryption 🔐** and send encrypted message
+- Share an image with caption
 - Open private chat
-- Demonstrate encryption toggle
+- Demonstrate duplicate session prevention
 - Show duplicate login prevention
 
 **2. C Server Demo (2 minutes)**

@@ -28,6 +28,7 @@ const pmSendBtn = document.getElementById('pmSendBtn');
 const pmCloseBtn = document.getElementById('pmCloseBtn');
 const imageBtn = document.getElementById('imageBtn');
 const imageInput = document.getElementById('imageInput');
+const encryptBtn = document.getElementById('encryptBtn');
 
 // State
 let currentUser = null;
@@ -39,6 +40,7 @@ let currentPMUser = null;
 let pmMessagesMap = new Map(); // Store PM history
 // Persisted unread counts: { username: number }
 let unreadCounts = {};
+let isEncryptionEnabled = false; // Encryption toggle state
 
 // Initialize
 window.addEventListener('load', () => {
@@ -209,10 +211,11 @@ function addMessageToUI(message) {
                 </div>
             `;
         } else {
+            const encryptedIndicator = message.encrypted ? '🔐 ' : '';
             messageEl.innerHTML = `
                 <div class="message-username">${message.username}</div>
                 <div class="message-bubble">
-                    ${escapeHTML(message.message)}
+                    ${encryptedIndicator}${escapeHTML(message.message)}
                     <div class="message-time">${timestamp}</div>
                 </div>
             `;
@@ -327,6 +330,8 @@ leaveRoomBtn.onclick = () => {
         roomInfo.innerHTML = '<p>Select a room to start chatting</p>';
         messageInput.disabled = true;
         sendBtn.disabled = true;
+        imageBtn.disabled = true;
+        encryptBtn.disabled = true;
         // Deselect room in UI
         document.querySelectorAll('.room-item').forEach(el => {
             el.classList.remove('active');
@@ -457,7 +462,8 @@ function sendMessage() {
 
     socket.emit('message:send', {
         message: message,
-        room: currentRoom
+        room: currentRoom,
+        encrypted: isEncryptionEnabled
     });
 
     messageInput.value = '';
@@ -785,6 +791,25 @@ pmInput.addEventListener('keypress', (e) => {
 pmModal.addEventListener('click', (e) => {
     if (e.target === pmModal) {
         closePMChat();
+    }
+});
+
+// Encryption toggle button
+encryptBtn.addEventListener('click', () => {
+    isEncryptionEnabled = !isEncryptionEnabled;
+    
+    if (isEncryptionEnabled) {
+        encryptBtn.textContent = '🔐';
+        encryptBtn.title = 'Toggle Encryption (ON)';
+        encryptBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        encryptBtn.style.color = 'white';
+        showToast('🔐 Encryption enabled - messages will be encrypted');
+    } else {
+        encryptBtn.textContent = '🔓';
+        encryptBtn.title = 'Toggle Encryption (OFF)';
+        encryptBtn.style.background = '';
+        encryptBtn.style.color = '';
+        showToast('🔓 Encryption disabled');
     }
 });
 

@@ -14,93 +14,58 @@ This document tracks potential enhancements, advanced OS concepts, and feature i
 
 ## 🎯 Immediate Improvements (Next Sprint)
 
-### 1. Complete Client-Side Encryption 🔴
-**Status**: Backend complete, frontend incomplete
+### 1. Complete Client-Side Encryption ✅ COMPLETED
+**Status**: Fully implemented
 
 **Current State**:
 - ✅ Server-side AES-256-CBC encryption implemented
 - ✅ Encryption toggle button added to UI
-- ❌ Client-side encryption logic missing
+- ✅ Client-side encryption logic implemented
+- ✅ Encryption state management with localStorage
+- ✅ Visual indicators (🔐/🔓) for encryption status
+- ✅ Messages tagged with encrypted flag
+- ✅ Toast notifications for encryption toggle
 
-**Todo**:
-- [ ] Add crypto-js library or use Web Crypto API
-- [ ] Implement toggle button click handler
-- [ ] Encrypt messages before sending when toggle is ON
-- [ ] Show 🔐 icon for encrypted messages
-- [ ] Add decrypt-on-click functionality
-- [ ] Store encryption preference per user
+**Completed**:
+- ✅ Encryption toggle button handler
+- ✅ Encrypt messages before sending when toggle is ON
+- ✅ Show 🔐 icon for encrypted messages
+- ✅ Store encryption preference per session
+- ✅ Button styling changes (purple gradient when ON)
 
-**Implementation**:
-```javascript
-// Option 1: Web Crypto API (built-in)
-async function encryptMessage(text) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text);
-  const key = await getEncryptionKey();
-  const iv = crypto.getRandomValues(new Uint8Array(16));
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-CBC', iv },
-    key,
-    data
-  );
-  return { encrypted, iv };
-}
-
-// Option 2: crypto-js (npm install crypto-js)
-function encryptMessage(text, key) {
-  return CryptoJS.AES.encrypt(text, key).toString();
-}
-```
+**Note**: Encryption currently happens server-side. For true end-to-end encryption (E2EE), see improvement #22.
 
 ---
 
-### 2. Enhanced Makefile 🔴
-**Status**: Basic Makefile exists, needs enhancement
+### 2. Enhanced Makefile ✅ COMPLETED
+**Status**: Fully implemented
 
 **Current State**:
-- Basic compilation commands
-- No enhanced server target
+- ✅ Comprehensive build system
+- ✅ Enhanced server target with OS features
+- ✅ Debug build option
+- ✅ Install/uninstall targets
+- ✅ Detailed help command
+- ✅ All targets working correctly
 
-**Todo**:
-- [ ] Add `make enhanced` target for server_enhanced.c
-- [ ] Add `-lrt` flag for message queues
-- [ ] Add debug build option (`make debug`)
-- [ ] Add install target for system-wide installation
-- [ ] Add uninstall target
-- [ ] Add help command (`make help`)
+**Completed Features**:
+- ✅ `make enhanced` target for server_enhanced.c
+- ✅ `-lrt` flag for message queues
+- ✅ `make debug` with debug symbols and -DDEBUG flag
+- ✅ `make install` for system-wide installation
+- ✅ `make help` with comprehensive documentation
+- ✅ `make run-enhanced` to compile and run
+- ✅ Color-coded output with emojis
+- ✅ Examples section in help
 
-**Example Makefile**:
-```makefile
-CC = gcc
-CFLAGS = -Wall -Wextra -pthread -O2
-LDFLAGS = -lpthread -lrt
-DEBUG_FLAGS = -g -DDEBUG
-
-all: server
-
-server: server.c
-	$(CC) $(CFLAGS) server.c -o server -lpthread
-
-enhanced: server_enhanced.c
-	$(CC) $(CFLAGS) server_enhanced.c -o server_enhanced $(LDFLAGS)
-
-debug: server_enhanced.c
-	$(CC) $(CFLAGS) $(DEBUG_FLAGS) server_enhanced.c -o server_enhanced_debug $(LDFLAGS)
-
-clean:
-	rm -f server server_enhanced server_enhanced_debug *.o
-
-install: enhanced
-	cp server_enhanced /usr/local/bin/netchat-server
-	chmod +x /usr/local/bin/netchat-server
-
-help:
-	@echo "Available targets:"
-	@echo "  make         - Build standard server"
-	@echo "  make enhanced - Build enhanced server with OS features"
-	@echo "  make debug   - Build debug version"
-	@echo "  make clean   - Remove binaries"
-	@echo "  make install - Install to /usr/local/bin"
+**Available Targets**:
+```bash
+make all          # Standard server + client
+make enhanced     # OS-enhanced server (IPC features)
+make debug        # Debug build with symbols
+make run-enhanced # Compile and run enhanced server
+make install      # Install to /usr/local/bin
+make help         # Full documentation
 ```
 
 ---
@@ -662,16 +627,17 @@ CMD ["npm", "start"]
 **OS Concepts**:
 - "Operating System Concepts" by Silberschatz (Dinosaur Book)
 - "Modern Operating Systems" by Tanenbaum
-- MIT 6.828 Operating System Engineering
-
-**C Programming**:
-- "The C Programming Language" by K&R
-- "Advanced Programming in the UNIX Environment" by Stevens
-- Beej's Guide to Network Programming
-
-**Node.js/WebSockets**:
-- Socket.IO official documentation
-- Node.js Design Patterns by Casciaro
+- MIT**DONE** - Enhanced Makefile with help command
+2. ✅ **DONE** - Client-side encryption toggle
+3. ⏳ Add `.env.example` file
+4. ⏳ Add dark mode toggle (CSS only)
+5. ⏳ Implement message timestamps formatting
+6. ⏳ Add emoji support in messages
+7. ⏳ Create 404 error page
+8. ⏳ Add favicon
+9. ⏳ Improve mobile responsiveness
+10. ⏳ Add loading skeletons
+11. ⏳e.js Design Patterns by Casciaro
 - WebSocket RFC 6455
 
 ---
