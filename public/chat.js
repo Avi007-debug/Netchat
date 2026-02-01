@@ -16,6 +16,7 @@ const createRoomBtn = document.getElementById('createRoomBtn');
 const newRoomInput = document.getElementById('newRoomInput');
 const logoutBtn = document.getElementById('logoutBtn');
 const roomInfo = document.getElementById('roomInfo');
+const leaveRoomBtn = document.getElementById('leaveRoomBtn');
 const typingIndicator = document.getElementById('typingIndicator');
 const typingText = document.getElementById('typingText');
 const pmModal = document.getElementById('pmModal');
@@ -271,6 +272,8 @@ function updateRoomInfo(name, users, messageCount) {
             </div>
         </div>
     `;
+    // Show leave room button when in a room
+    leaveRoomBtn.style.display = 'block';
 }
 
 function joinRoom(roomName) {
@@ -296,6 +299,25 @@ function joinRoom(roomName) {
 
     console.log(`📌 Joined room: ${roomName}`);
 }
+
+// Leave room
+leaveRoomBtn.onclick = () => {
+    if (currentRoom) {
+        socket.emit('room:leave');
+        currentRoom = null;
+        leaveRoomBtn.style.display = 'none';
+        messagesContainer.innerHTML = '<div class="no-messages"><p>No messages yet. Say something!</p></div>';
+        roomInfo.innerHTML = '<p>Select a room to start chatting</p>';
+        messageInput.disabled = true;
+        sendBtn.disabled = true;
+        // Deselect room in UI
+        document.querySelectorAll('.room-item').forEach(el => {
+            el.classList.remove('active');
+        });
+        socket.emit('rooms:get');
+        console.log(`🚪 Left room: ${currentRoom}`);
+    }
+};
 
 // ===== Users Functions =====
 

@@ -262,6 +262,32 @@ body {
     font-size: 14px;
 }
 
+.room-controls {
+    background: #f8f9fa;
+    padding: 10px 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.leave-room-btn {
+    background: #ff6b6b;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.leave-room-btn:hover {
+    background: #ff5252;
+    transform: translateY(-2px);
+}
+
+.leave-room-btn:active {
+    transform: translateY(0);
+}
+
 /* Messages Container */
 .messages-container {
     flex: 1;
