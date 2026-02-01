@@ -5,14 +5,23 @@ client/client
 # Runtime generated files
 chat.log
 users.txt
+users.json
+
+# Node modules
+node_modules/
+package-lock.json
 
 # System files
 *.exe
 *.o
 *.out
 .DS_Store
+Thumbs.db
 
 # IDE files
 .vscode/
 .idea/
 *.swp
+
+# Environment
+.env.local

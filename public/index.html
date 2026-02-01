@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetChat - Login & Register</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="auth-wrapper">
+            <!-- Logo & Header -->
+            <div class="header">
+                <h1>💬 NetChat</h1>
+                <p>Connect with others, chat in real-time</p>
+            </div>
+
+            <!-- Login Form -->
+            <div class="form-container" id="loginForm">
+                <h2>Welcome Back</h2>
+                <p class="subtitle">Sign in to your account</p>
+                
+                <form id="loginFormElement">
+                    <div class="form-group">
+                        <label for="loginEmail">Email Address</label>
+                        <input 
+                            type="email" 
+                            id="loginEmail" 
+                            name="email" 
+                            placeholder="you@example.com" 
+                            required
+                        >
+                        <span class="error-message" id="loginEmailError"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="loginPassword">Password</label>
+                        <div class="password-wrapper">
+                            <input 
+                                type="password" 
+                                id="loginPassword" 
+                                name="password" 
+                                placeholder="••••••••" 
+                                required
+                            >
+                            <button type="button" class="toggle-password" onclick="togglePassword('loginPassword')">
+                                👁️
+                            </button>
+                        </div>
+                        <span class="error-message" id="loginPasswordError"></span>
+                    </div>
+
+                    <div class="remember-forgot">
+                        <label class="remember">
+                            <input type="checkbox"> Remember me
+                        </label>
+                        <a href="#" class="forgot-password">Forgot password?</a>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-submit" id="loginSubmitBtn">
+                        <span class="btn-text">Sign In</span>
+                        <span class="btn-loader" id="loginLoader"></span>
+                    </button>
+
+                    <div class="message" id="loginMessage"></div>
+                </form>
+
+                <div class="form-footer">
+                    <p>Don't have an account? 
+                        <a href="#" onclick="toggleForms()" class="link">Create one</a>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div class="form-container hidden" id="registerForm">
+                <h2>Create Account</h2>
+                <p class="subtitle">Join NetChat today</p>
+                
+                <form id="registerFormElement">
+                    <div class="form-group">
+                        <label for="registerUsername">Username</label>
+                        <input 
+                            type="text" 
+                            id="registerUsername" 
+                            name="username" 
+                            placeholder="Your username" 
+                            required
+                        >
+                        <span class="error-message" id="registerUsernameError"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registerEmail">Email Address</label>
+                        <input 
+                            type="email" 
+                            id="registerEmail" 
+                            name="email" 
+                            placeholder="you@example.com" 
+                            required
+                        >
+                        <span class="error-message" id="registerEmailError"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registerPassword">Password</label>
+                        <div class="password-wrapper">
+                            <input 
+                                type="password" 
+                                id="registerPassword" 
+                                name="password" 
+                                placeholder="••••••••" 
+                                required
+                            >
+                            <button type="button" class="toggle-password" onclick="togglePassword('registerPassword')">
+                                👁️
+                            </button>
+                        </div>
+                        <div class="password-strength" id="passwordStrength"></div>
+                        <span class="error-message" id="registerPasswordError"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registerConfirmPassword">Confirm Password</label>
+                        <div class="password-wrapper">
+                            <input 
+                                type="password" 
+                                id="registerConfirmPassword" 
+                                name="confirmPassword" 
+                                placeholder="••••••••" 
+                                required
+                            >
+                            <button type="button" class="toggle-password" onclick="togglePassword('registerConfirmPassword')">
+                                👁️
+                            </button>
+                        </div>
+                        <span class="error-message" id="registerConfirmPasswordError"></span>
+                    </div>
+
+                    <label class="terms">
+                        <input type="checkbox" required> I agree to the 
+                        <a href="#">Terms of Service</a> and 
+                        <a href="#">Privacy Policy</a>
+                    </label>
+
+                    <button type="submit" class="btn btn-primary btn-submit" id="registerSubmitBtn">
+                        <span class="btn-text">Create Account</span>
+                        <span class="btn-loader" id="registerLoader"></span>
+                    </button>
+
+                    <div class="message" id="registerMessage"></div>
+                </form>
+
+                <div class="form-footer">
+                    <p>Already have an account? 
+                        <a href="#" onclick="toggleForms()" class="link">Sign in</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div class="modal hidden" id="successModal">
+        <div class="modal-content">
+            <div class="modal-icon success">✓</div>
+            <h3 id="successTitle">Success!</h3>
+            <p id="successMessage"></p>
+            <button class="btn btn-primary" onclick="closeModal()">Continue to Chat</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
