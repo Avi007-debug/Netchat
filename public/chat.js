@@ -26,6 +26,8 @@ const pmMessagesContainer = document.getElementById('pmMessages');
 const pmInput = document.getElementById('pmInput');
 const pmSendBtn = document.getElementById('pmSendBtn');
 const pmCloseBtn = document.getElementById('pmCloseBtn');
+const imageBtn = document.getElementById('imageBtn');
+const imageInput = document.getElementById('imageInput');
 
 // State
 let currentUser = null;
@@ -194,13 +196,27 @@ function addMessageToUI(message) {
             </div>
         `;
     } else {
-        messageEl.innerHTML = `
-            <div class="message-username">${message.username}</div>
-            <div class="message-bubble">
-                ${escapeHTML(message.message)}
-                <div class="message-time">${timestamp}</div>
-            </div>
-        `;
+        // Check if message contains an image
+        if (message.imageUrl) {
+            messageEl.innerHTML = `
+                <div class="message-username">${message.username}</div>
+                <div class="message-bubble">
+                    <div class="message-image-container">
+                        <img src="${escapeHTML(message.imageUrl)}" alt="Shared image" class="message-image" onclick="openImageModal(this.src)">
+                    </div>
+                    ${message.message ? `<div class="image-caption">${escapeHTML(message.message)}</div>` : ''}
+                    <div class="message-time">${timestamp}</div>
+                </div>
+            `;
+        } else {
+            messageEl.innerHTML = `
+                <div class="message-username">${message.username}</div>
+                <div class="message-bubble">
+                    ${escapeHTML(message.message)}
+                    <div class="message-time">${timestamp}</div>
+                </div>
+            `;
+        }
     }
 
     messagesContainer.appendChild(messageEl);
@@ -289,6 +305,7 @@ function joinRoom(roomName) {
     // Enable message input
     messageInput.disabled = false;
     sendBtn.disabled = false;
+    imageBtn.disabled = false;
     messageInput.focus();
 
     // Update rooms list UI
@@ -364,6 +381,61 @@ function updateUsersList() {
 }
 
 // ===== Input Handling =====
+
+// Image Upload Functions
+async function uploadImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+        showToast('❌ Authentication required');
+        return null;
+    }
+
+    try {
+        const response = await fetch('/api/upload/image', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            return data.imageUrl;
+        } else {
+            showToast(`❌ ${data.message}`);
+            return null;
+        }
+    } catch (error) {
+        console.error('Image upload error:', error);
+        showToast('❌ Failed to upload image');
+        return null;
+    }
+}
+
+function openImageModal(src) {
+    const modal = document.createElement('div');
+    modal.className = 'image-modal';
+    modal.innerHTML = `
+        <div class="image-modal-content">
+            <span class="image-modal-close">&times;</span>
+            <img src="${src}" alt="Full size image">
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    const closeBtn = modal.querySelector('.image-modal-close');
+    closeBtn.onclick = () => modal.remove();
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    };
+}
 
 sendBtn.onclick = sendMessage;
 
@@ -476,6 +548,64 @@ logoutBtn.onclick = () => {
 };
 
 // ===== Private Messaging Functions =====
+
+// ===== Image Upload Functions =====
+
+async function uploadImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+        showToast('❌ Authentication required');
+        return null;
+    }
+
+    try {
+        const response = await fetch('/api/upload/image', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            return data.imageUrl;
+        } else {
+            showToast(`❌ ${data.message}`);
+            return null;
+        }
+    } catch (error) {
+        console.error('Image upload error:', error);
+        showToast('❌ Failed to upload image');
+        return null;
+    }
+}
+
+function openImageModal(src) {
+    const modal = document.createElement('div');
+    modal.className = 'image-modal';
+    modal.innerHTML = `
+        <div class="image-modal-content">
+            <span class="image-modal-close">&times;</span>
+            <img src="${src}" alt="Full size image">
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    const closeBtn = modal.querySelector('.image-modal-close');
+    closeBtn.onclick = () => modal.remove();
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    };
+}
+
+// ===== Private Message Functions =====
 
 function openPMChat(username) {
     currentPMUser = username;
@@ -596,6 +726,52 @@ function showToast(text) {
 }
 
 // PM Modal Event Listeners
+imageBtn.onclick = () => imageInput.click();
+
+imageInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+        showToast('❌ Image too large. Maximum size is 5MB.');
+        imageInput.value = '';
+        return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+        showToast('❌ Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.');
+        imageInput.value = '';
+        return;
+    }
+
+    // Show uploading indicator
+    imageBtn.disabled = true;
+    imageBtn.textContent = '⏳';
+
+    // Upload image
+    const imageUrl = await uploadImage(file);
+    
+    // Reset button
+    imageBtn.disabled = false;
+    imageBtn.textContent = '📷';
+    imageInput.value = '';
+
+    if (imageUrl && currentRoom) {
+        // Send image message
+        const message = messageInput.value.trim(); // Optional caption
+        socket.emit('message:send', {
+            message: message || '',
+            room: currentRoom,
+            imageUrl: imageUrl
+        });
+        messageInput.value = '';
+        showToast('✅ Image sent!');
+    }
+});
+
 pmCloseBtn.onclick = closePMChat;
 pmSendBtn.onclick = sendPrivateMessage;
 pmInput.addEventListener('keypress', (e) => {

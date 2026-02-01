@@ -7,6 +7,8 @@ const { body, validationResult } = require('express-validator');
 const fs = require('fs');
 const http = require('http');
 const socketIO = require('socket.io');
+const multer = require('multer');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -20,11 +22,76 @@ const io = socketIO(server, {
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
+// ===== ENCRYPTION CONFIGURATION =====
+const ENCRYPTION_KEY = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'netchat-encryption-key-2026', 'salt', 32);
+const IV_LENGTH = 16;
+
+// Encrypt message
+function encryptMessage(text) {
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return iv.toString('hex') + ':' + encrypted;
+}
+
+// Decrypt message
+function decryptMessage(text) {
+  try {
+    const parts = text.split(':');
+    const iv = Buffer.from(parts.shift(), 'hex');
+    const encryptedText = Buffer.from(parts.join(':'), 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (error) {
+    console.error('Decryption error:', error);
+    return text; // Return original if decryption fails
+  }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Create uploads directory if it doesn't exist
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// Configure multer for image uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: function (req, file, cb) {
+    // Accept only images
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed (jpeg, jpg, png, gif, webp)'));
+    }
+  }
+});
 
 // Users storage file
 const USERS_FILE = path.join(__dirname, 'users.json');
@@ -281,6 +348,73 @@ app.get('/chat.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
 
+// ===== IMAGE UPLOAD ROUTE =====
+app.post('/api/upload/image', verifyToken, upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    // Return the file URL
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({
+      success: true,
+      message: 'Image uploaded successfully',
+      imageUrl: fileUrl,
+      filename: req.file.filename,
+      size: req.file.size
+    });
+  } catch (error) {
+    console.error('Image upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error uploading image'
+    });
+  }
+});
+
+// ===== DECRYPT MESSAGE ROUTE =====
+app.post('/api/decrypt', verifyToken, (req, res) => {
+  try {
+    const { encryptedMessage } = req.body;
+    
+    if (!encryptedMessage) {
+      return res.status(400).json({ success: false, message: 'No message to decrypt' });
+    }
+
+    const decrypted = decryptMessage(encryptedMessage);
+    
+    res.json({
+      success: true,
+      message: 'Message decrypted successfully',
+      decryptedMessage: decrypted
+    });
+  } catch (error) {
+    console.error('Decryption error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error decrypting message'
+    });
+  }
+});
+
+// Handle multer errors
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: 'File size too large. Maximum size is 5MB.'
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+  next(error);
+});
+
 // ===== WEBSOCKET CONFIGURATION =====
 // Store connected users and active sessions
 const connectedUsers = new Map();
@@ -395,7 +529,7 @@ io.on('connection', (socket) => {
 
   // ===== Send Message =====
   socket.on('message:send', (data) => {
-    const { message, room } = data;
+    const { message, room, encrypted, imageUrl } = data;
     const user = connectedUsers.get(socket.userId);
 
     if (!user || !user.room) {
@@ -403,11 +537,19 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Handle encryption if requested
+    let finalMessage = message.trim();
+    if (encrypted && finalMessage) {
+      finalMessage = encryptMessage(finalMessage);
+    }
+
     const messageObj = {
       id: Date.now().toString(),
       userId: socket.userId,
       username: socket.username,
-      message: message.trim(),
+      message: finalMessage,
+      encrypted: encrypted || false,
+      imageUrl: imageUrl || null,
       timestamp: new Date().toISOString(),
       room: user.room,
       type: 'user'
@@ -420,7 +562,14 @@ io.on('connection', (socket) => {
 
     // Broadcast message to room
     io.to(user.room).emit('message:new', messageObj);
-    console.log(`💬 ${socket.username} in ${user.room}: ${message}`);
+    
+    if (encrypted) {
+      console.log(`🔐 ${socket.username} sent encrypted message in ${user.room}`);
+    } else if (imageUrl) {
+      console.log(`📷 ${socket.username} sent image in ${user.room}`);
+    } else {
+      console.log(`💬 ${socket.username} in ${user.room}: ${message}`);
+    }
   });
 
   // ===== Get Room Messages =====

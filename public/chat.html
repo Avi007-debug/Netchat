@@ -87,6 +87,14 @@
                 <!-- Message Input -->
                 <div class="message-input-area">
                     <input 
+                        type="file" 
+                        id="imageInput" 
+                        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                        style="display: none;"
+                    >
+                    <button id="imageBtn" class="image-btn" title="Send Image" disabled>📷</button>
+                    <button id="encryptBtn" class="encrypt-btn" title="Toggle Encryption (OFF)" disabled>🔓</button>
+                    <input 
                         type="text" 
                         id="messageInput" 
                         placeholder="Type your message..." 

@@ -4,113 +4,70 @@
 ![Node.js](https://img.shields.io/badge/node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black)
 
-A dual-mode chat application demonstrating OS concepts with both C socket server and Node.js web server.
+A dual-mode chat application demonstrating operating system concepts with both C socket server and Node.js web server implementations. Perfect for 2nd year engineering OS projects.
 
 ---
 
-## 🎯 Features
+## 🎯 Features Overview
 
 ### C Server (OS Concepts Demo)
-- **Multi-threading**: pthread-based concurrent client handling
-- **TCP Sockets**: BSD socket programming with SOCK_STREAM
-- **Mutex Synchronization**: Thread-safe shared resources
-- **Signal Handling**: Graceful SIGINT shutdown
-- **File I/O**: Persistent user authentication and message logging
-- **Chat Rooms**: Multi-room support with room management
-- **Private Messaging**: Direct user-to-user messaging
-- **Resource Management**: Client admission control (max 10 clients)
+- ✅ **Multi-threading**: pthread-based concurrent client handling
+- ✅ **TCP Sockets**: BSD socket programming (SOCK_STREAM)
+- ✅ **Mutex Synchronization**: Thread-safe shared resources
+- ✅ **Signal Handling**: Graceful SIGINT shutdown
+- ✅ **File I/O**: Persistent user authentication and message logging
+- ✅ **IPC - Shared Memory**: Cross-process message buffer (shmget/shmat)
+- ✅ **IPC - Message Queues**: Offline message delivery (POSIX mqueue)
+- ✅ **Process Forking**: Separate process per client connection
+- ✅ **Semaphores**: Connection control and resource management
+- ✅ **Chat Rooms**: Multi-room support with room management
+- ✅ **Private Messaging**: Direct user-to-user messaging
+- ✅ **Resource Management**: Client admission control (max 10 clients)
 
 ### Web Server (Modern Interface)
-- **WebSocket**: Real-time bidirectional communication
-- **JWT Authentication**: Secure token-based auth
-- **RESTful API**: Express.js backend
-- **Modern UI**: Responsive HTML/CSS/JS frontend
-- **Bcrypt Hashing**: Secure password storage
+- ✅ **WebSocket**: Real-time bidirectional communication (Socket.IO)
+- ✅ **JWT Authentication**: Secure token-based auth with 24hr expiry
+- ✅ **RESTful API**: Express.js backend with input validation
+- ✅ **Modern UI**: Responsive HTML/CSS/JS frontend
+- ✅ **Bcrypt Hashing**: Secure password storage (10 rounds)
+- ✅ **Image Sharing**: Upload/share images (JPEG, PNG, GIF, WebP up to 5MB)
+- ✅ **Message Encryption**: AES-256-CBC encrypted chat option
+- ✅ **Private Messaging**: Click-to-chat modal with history
+- ✅ **Session Management**: Anti-hijacking duplicate login prevention
+
+See [FEATURES.md](FEATURES.md) for complete feature list.
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: C Socket Server (Port 8080)
+### Option 1: Web Server (Recommended for Demo)
 
 ```bash
-# Compile
+# 1. Install dependencies
+npm install
+
+# 2. Start server
+npm start
+
+# 3. Open browser
+# Navigate to: http://localhost:3000
+```
+
+### Option 2: C Socket Server (OS Concepts)
+
+```bash
+# 1. Compile
 make all
 
-# Terminal 1 - Run C server
+# 2. Terminal 1 - Run server
 make run-server
 
-# Terminal 2+ - Run C clients
+# 3. Terminal 2+ - Run clients
 make run-client
 ```
 
-### Option 2: Web Server (Port 3000)
-
-```bash
-# Install dependencies
-npm install
-
-# Run web server
-npm start
-# Or: make web
-
-# Open browser
-# Visit: http://localhost:3000
-```
-
----
-
-## 📋 C Client Commands
-
-| Command | Description |
-|---------|-------------|
-| `<message>` | Send to current room |
-| `/pm <user> <msg>` | Private message |
-| `/join <room>` | Join/create room |
-| `/room` | Show current room |
-| `/rooms` | List all rooms |
-| `/users` | List room users |
-| `/help` | Show help menu |
-
----
-
-## 🏗️ OS Concepts Demonstrated
-
-### 1. Multi-threading (pthreads)
-```c
-pthread_t tid;
-pthread_create(&tid, NULL, handle_client, &client_fd);
-pthread_detach(tid);  // Auto cleanup
-```
-
-### 2. Thread Synchronization
-```c
-pthread_mutex_t lock;
-pthread_mutex_lock(&lock);
-// Critical section: client_count, log_file
-pthread_mutex_unlock(&lock);
-```
-
-### 3. Socket Programming
-```c
-// Server: socket() → bind() → listen() → accept()
-// Client: socket() → connect() → send()/recv()
-```
-
-### 4. Signal Handling
-```c
-signal(SIGINT, handle_shutdown);  // Ctrl+C
-void handle_shutdown(int sig) {
-    broadcast_all("Server shutting down");
-    cleanup_resources();
-    exit(0);
-}
-```
-
-### 5. File I/O & Persistence
-- **users.txt**: User credentials storage
-- **chat.log**: Message logging with timestamps
-- Mutex-protected file writes
+For detailed setup instructions, see [SETUP.md](SETUP.md).
 
 ---
 
@@ -119,126 +76,215 @@ void handle_shutdown(int sig) {
 ```
 Netchat/
 ├── server/
-│   ├── server.c          # Multi-threaded C server
-│   └── server            # Compiled binary (auto-generated)
+│   ├── server.c                # Original C server (threads)
+│   ├── server_enhanced.c       # Enhanced C server (IPC + forking)
+│   └── Makefile                # Build configuration
 ├── client/
-│   ├── client.c          # C client with receive thread
-│   └── client            # Compiled binary (auto-generated)
+│   └── client.c                # C client implementation
 ├── public/
-│   ├── index.html        # Landing page
-│   ├── chat.html         # Chat interface
-│   ├── chat.js           # WebSocket client
-│   ├── chat.css          # Styles
-│   └── script.js         # Auth logic
-├── server.js             # Node.js web server
-├── package.json          # Node dependencies
-├── Makefile              # Build automation
-├── .env                  # Environment config
-├── .gitignore
-├── LICENSE
-└── README.md
-
-Runtime Files (auto-generated):
-├── users.txt             # C server user database
-├── users.json            # Web server user database
-└── chat.log              # Message history
+│   ├── index.html              # Login/register page
+│   ├── chat.html               # Main chat interface
+│   ├── chat.js                 # Client-side logic
+│   ├── chat.css                # Styling
+│   ├── script.js               # Auth logic
+│   ├── styles.css              # Landing page styles
+│   └── uploads/                # Image storage (auto-created)
+├── server.js                   # Node.js web server
+├── package.json                # Node.js dependencies
+├── users.json                  # Web server user database
+├── chat.log                    # Server message logs
+├── users.txt                   # C server user database
+├── README.md                   # This file
+├── FEATURES.md                 # Complete feature documentation
+└── SETUP.md                    # Installation & setup guide
 ```
 
 ---
 
-## 🔧 Technical Details
+## 🎓 OS Concepts Demonstrated
+
+This project demonstrates essential operating system concepts:
+
+| Concept | Implementation | File |
+|---------|---------------|------|
+| **Multi-threading** | pthread library for concurrent clients | server.c |
+| **Socket Programming** | TCP/IP BSD sockets | server.c, client.c |
+| **Mutex Synchronization** | pthread_mutex for thread safety | server.c |
+| **Shared Memory (IPC)** | shmget/shmat for cross-process buffer | server_enhanced.c |
+| **Message Queues (IPC)** | POSIX mqueue for async delivery | server_enhanced.c |
+| **Process Forking** | fork() for separate client processes | server_enhanced.c |
+| **Semaphores** | Named semaphores for resource control | server_enhanced.c |
+| **Signal Handling** | SIGINT for graceful shutdown | server.c |
+| **File I/O** | Read/write user data and logs | server.c, server.js |
+| **Session Management** | Single-session enforcement | server.js |
+| **Stream Processing** | Multer file streams for uploads | server.js |
+| **Encryption** | AES-256-CBC message encryption | server.js |
+
+---
+
+## 🛠️ Technology Stack
 
 ### C Server
+- **Language**: C (C11 standard)
+- **Threading**: POSIX threads (pthread)
+- **Networking**: BSD Sockets (TCP/IP)
+- **IPC**: POSIX Shared Memory & Message Queues
+- **Synchronization**: Mutexes & Semaphores
 - **Port**: 8080
-- **Max Clients**: 10
+- **Max Clients**: 10 concurrent
 - **Buffer Size**: 1024 bytes
-- **Default Room**: "general"
-- **Auth**: File-based (users.txt)
 
 ### Web Server
+- **Runtime**: Node.js (v14+)
+- **Framework**: Express.js
+- **Real-time**: Socket.IO (WebSockets)
+- **Authentication**: JWT + Bcrypt
+- **File Upload**: Multer
+- **Encryption**: Node.js crypto (AES-256-CBC)
 - **Port**: 3000
-- **Auth**: JWT + bcrypt
-- **Transport**: Socket.IO (WebSocket)
-- **Storage**: JSON file (users.json)
+- **Transport**: HTTP + WebSocket
 
 ---
 
-## 🛠️ Build Commands
+## 📊 Build Commands
 
-```bash
-make all         # Compile C server & client
-make server      # Compile C server only
-make client      # Compile C client only
-make run-server  # Run C server
-make run-client  # Run C client
-make web         # Run Node.js web server
-make clean       # Remove binaries & logs
-make reset       # Clean + rebuild
-make help        # Show all commands
-```
-
----
-
-## 🎓 Learning Outcomes
-
-This project demonstrates:
-- **Socket Programming**: TCP client-server architecture
-- **Concurrency**: Multi-threading with pthreads
-- **Synchronization**: Mutex locks, race condition prevention
-- **IPC**: Inter-process communication via sockets
-- **Signal Handling**: Graceful shutdown
-- **File I/O**: Persistent storage, logging
-- **Memory Management**: Buffer handling, resource cleanup
-- **Modern Web**: WebSocket, JWT, REST APIs
+| Command | Description |
+|---------|-------------|
+| `make all` | Compile both server and client |
+| `make server` | Compile server only |
+| `make client` | Compile client only |
+| `make run-server` | Start C server (port 8080) |
+| `make run-client` | Start C client |
+| `make web` | Start Node.js server (port 3000) |
+| `make clean` | Remove binaries and logs |
+| `make reset` | Clean and rebuild |
+| `make help` | Show all commands |
 
 ---
 
-## 📝 Example Session
-
-```bash
-# Terminal 1 - C Server
-$ make run-server
-Server running on port 8080...
-Maximum clients: 10
-
-# Terminal 2 - Client 1
-$ make run-client
-Enter your username: Alice
-Enter password: pass123
-✅ Authentication successful!
-🏠 You are now in room: #general
-
-Alice: Hello!
-[Server]: Bob has joined #general
-[19:45] [#general] Bob: Hi Alice!
-
-# Terminal 3 - Client 2
-$ make run-client
-Enter your username: Bob
-Enter password: pass456
-Bob: Hi Alice!
-```
-
----
-
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) file
-
----
-
-## 🌟 Features Summary
+## 🎯 Feature Comparison
 
 | Feature | C Server | Web Server |
 |---------|----------|------------|
-| Multi-threading | ✅ pthreads | ✅ Node.js async |
-| Authentication | ✅ File-based | ✅ JWT + bcrypt |
-| Private Messages | ✅ | ✅ |
-| Chat Rooms | ✅ | ✅ |
-| Logging | ✅ chat.log | ✅ console |
-| Max Clients | ✅ 10 | ✅ unlimited |
-| Graceful Shutdown | ✅ SIGINT | ✅ process events |
+| **Real-time Chat** | ✅ TCP Sockets | ✅ WebSockets |
+| **Authentication** | ✅ File-based | ✅ JWT + Bcrypt |
+| **Multi-threading** | ✅ pthreads | ✅ Node.js event loop |
+| **Chat Rooms** | ✅ `/join` command | ✅ UI buttons |
+| **Private Messages** | ✅ `/pm` command | ✅ Click-to-chat UI |
+| **Image Sharing** | ❌ | ✅ Upload + preview |
+| **Encryption** | ❌ | ✅ AES-256-CBC |
+| **Web Interface** | ❌ Terminal only | ✅ Modern UI |
+| **Shared Memory** | ✅ shmget/shmat | ❌ |
+| **Message Queues** | ✅ POSIX mqueue | ❌ |
+| **Process Forking** | ✅ fork() | ❌ |
+| **Semaphores** | ✅ sem_open | ❌ |
 
 ---
 
-Built with ❤️ to demonstrate Operating Systems concepts in C
+## 🎬 Demo Flow
+
+**1. Web Server Demo (3 minutes)**
+- Register two users
+- Join same room
+- Send text messages
+- Share an image
+- Open private chat
+- Demonstrate encryption toggle
+- Show duplicate login prevention
+
+**2. C Server Demo (2 minutes)**
+- Connect two clients
+- Show pthread logs
+- Demonstrate room commands
+- Show shared memory buffer
+- Display process forking
+- Graceful shutdown (Ctrl+C)
+
+See [SETUP.md](SETUP.md) for detailed demo script.
+
+---
+
+## 🔧 Development
+
+### Running in Development Mode
+```bash
+# Node.js server with auto-restart
+npm run dev
+
+# C server with debug info
+make clean && make all && ./server/server
+```
+
+### Debugging
+```bash
+# C server with GDB
+gdb ./server/server
+
+# Check for memory leaks
+valgrind --leak-check=full ./server/server
+
+# Monitor system calls
+strace ./server/server
+```
+
+---
+
+## 🐛 Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Port already in use | `lsof -ti:3000 \| xargs kill -9` or change PORT in .env |
+| Cannot connect | Check firewall settings |
+| Image upload fails | Verify `public/uploads/` exists |
+| C compilation error | `sudo apt-get install build-essential` |
+| Module not found | `npm install` |
+
+See [SETUP.md](SETUP.md) for comprehensive troubleshooting guide.
+
+---
+
+## 📝 License
+
+MIT License - See [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- **POSIX Threads**: Multi-threading implementation
+- **Socket.IO**: Real-time communication
+- **Express.js**: Web framework
+- **Multer**: File upload handling
+- Inspired by classic chat applications and OS textbooks
+
+---
+
+## 📧 Support
+
+For issues, questions, or contributions:
+1. Check [FEATURES.md](FEATURES.md) for feature documentation
+2. Read [SETUP.md](SETUP.md) for setup help
+3. Review existing GitHub issues
+4. Create a new issue with detailed description
+
+---
+
+**Built with ❤️ for Operating Systems course project**
+
+**Status**: ✅ Production ready | 🎓 Educational project | 🚀 Actively maintained
+
+---
+
+## 🚀 Future Enhancements
+
+Potential improvements for advanced projects:
+- Load balancing across multiple servers
+- Redis for distributed session management
+- Database integration (PostgreSQL/MongoDB)
+- End-to-end encryption
+- Voice/video chat
+- Docker containerization
+- Kubernetes deployment
+- CI/CD pipeline
+
+See [IMPROVEMENT_SUGGESTIONS.md](IMPROVEMENT_SUGGESTIONS.md) for detailed implementation guides.
