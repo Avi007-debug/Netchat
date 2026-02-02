@@ -26,6 +26,7 @@ const pmMessagesContainer = document.getElementById('pmMessages');
 const pmInput = document.getElementById('pmInput');
 const pmSendBtn = document.getElementById('pmSendBtn');
 const pmCloseBtn = document.getElementById('pmCloseBtn');
+const pmEncryptBtn = document.getElementById('pmEncryptBtn');
 const imageBtn = document.getElementById('imageBtn');
 const imageInput = document.getElementById('imageInput');
 const encryptBtn = document.getElementById('encryptBtn');
@@ -40,7 +41,8 @@ let currentPMUser = null;
 let pmMessagesMap = new Map(); // Store PM history
 // Persisted unread counts: { username: number }
 let unreadCounts = {};
-let isEncryptionEnabled = false; // Encryption toggle state
+let isEncryptionEnabled = false; // Encryption toggle state for rooms
+let isPMEncryptionEnabled = false; // Encryption toggle state for private messages
 
 // Initialize
 window.addEventListener('load', () => {
@@ -97,18 +99,24 @@ socket.on('session:duplicate', (data) => {
 
 // Private Message Received (single consolidated handler)
 socket.on('pm:received', (data) => {
-    const { from, message, timestamp } = data;
+    const { from, message, encrypted, timestamp } = data;
+    
+    // Decrypt message if it was encrypted
+    let displayMessage = message;
+    if (encrypted) {
+        displayMessage = decryptMessage(message);
+    }
 
     // Browser notification
-    showNotification(`New PM from ${from}`);
+    showNotification(`New PM from ${from}${encrypted ? ' (encrypted)' : ''}`);
 
     // Store PM locally
     if (!pmMessagesMap.has(from)) pmMessagesMap.set(from, []);
-    pmMessagesMap.get(from).push({ from, message, timestamp, type: 'received' });
+    pmMessagesMap.get(from).push({ from, message: displayMessage, timestamp, type: 'received' });
 
     // If PM chat is open with this user, show immediately and do not mark unread
     if (currentPMUser === from) {
-        addPMToUI(from, message, timestamp, 'received');
+        addPMToUI(from, displayMessage, timestamp, 'received');
     } else {
         // Increment unread count and persist
         unreadCounts[from] = (unreadCounts[from] || 0) + 1;
@@ -119,7 +127,7 @@ socket.on('pm:received', (data) => {
         if (userBtn) userBtn.classList.add('pm-unread');
 
         // Show in-page toast (truncated)
-        showToast(`PM from ${from}: ${message}`);
+        showToast(`PM from ${from}: ${displayMessage}`);
     }
 });
 
@@ -309,7 +317,8 @@ function joinRoom(roomName) {
     messageInput.disabled = false;
     sendBtn.disabled = false;
     imageBtn.disabled = false;
-    messageInput.focus();
+    encryptBtn.disabled = false;
+    messageInput.focus;
 
     // Update rooms list UI
     document.querySelectorAll('.room-item').forEach(el => {
@@ -619,6 +628,14 @@ function openPMChat(username) {
     pmUsernameInfo.textContent = username;
     pmModal.style.display = 'flex';
     
+    // Reset encryption for new PM chat
+    isPMEncryptionEnabled = false;
+    if (pmEncryptBtn) {
+        pmEncryptBtn.textContent = '🔓';
+        pmEncryptBtn.title = 'PM Encryption OFF - Messages sent as plain text. Click to enable.';
+        pmEncryptBtn.classList.remove('active');
+    }
+    
     // Load PM history
     loadPMHistory(username);
     pmInput.focus();
@@ -675,7 +692,8 @@ function sendPrivateMessage() {
     // Send to server
     socket.emit('pm:send', {
         to: currentPMUser,
-        message: message
+        message: message,
+        encrypted: isPMEncryptionEnabled
     });
     
     // Store locally
@@ -698,16 +716,18 @@ function showNotification(message) {
 }
 
 // In-page toast notification
-function showToast(text) {
-    // Limit length
-    const MAX = 120;
+function showToast(text, duration = 6000) {
+    // Allow longer messages for encryption help, but still cap
+    const MAX = text.includes('ENCRYPTION') ? 500 : 200;
     let truncated = text;
     if (text.length > MAX) truncated = text.slice(0, MAX - 1) + '…';
 
     const toast = document.createElement('div');
     toast.className = 'netchat-toast';
+    // Support multi-line with <br>
+    const formattedText = truncated.replace(/\\n/g, '<br>');
     toast.innerHTML = `
-        <span class="toast-text">${escapeHTML(truncated)}</span>
+        <span class="toast-text">${formattedText}</span>
         <button class="toast-dismiss" aria-label="Dismiss">✕</button>
     `;
 
@@ -724,8 +744,8 @@ function showToast(text) {
     const dbtn = toast.querySelector('.toast-dismiss');
     if (dbtn) dbtn.addEventListener('click', (e) => { e.stopPropagation(); removeToast(); });
 
-    // Auto remove after 6s
-    const timer = setTimeout(removeToast, 6000);
+    // Auto remove after specified duration
+    const timer = setTimeout(removeToast, duration);
 
     // Pause auto-hide on hover
     toast.addEventListener('mouseenter', () => clearTimeout(timer));
@@ -800,17 +820,35 @@ encryptBtn.addEventListener('click', () => {
     
     if (isEncryptionEnabled) {
         encryptBtn.textContent = '🔐';
-        encryptBtn.title = 'Toggle Encryption (ON)';
-        encryptBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-        encryptBtn.style.color = 'white';
-        showToast('🔐 Encryption enabled - messages will be encrypted');
+        encryptBtn.title = 'Encryption ON - Messages are encrypted with AES-256. Click to disable.';
+        encryptBtn.classList.add('active');
+        showToast('🔐 Encryption ENABLED\n\nYour messages will be encrypted with AES-256-CBC.\nOther users will see encrypted text unless they decrypt it.', 5000);
     } else {
         encryptBtn.textContent = '🔓';
-        encryptBtn.title = 'Toggle Encryption (OFF)';
-        encryptBtn.style.background = '';
-        encryptBtn.style.color = '';
-        showToast('🔓 Encryption disabled');
+        encryptBtn.title = 'Encryption OFF - Messages sent as plain text. Click to enable encryption.';
+        encryptBtn.classList.remove('active');
+        showToast('🔓 Encryption DISABLED\n\nMessages will be sent as plain text.', 3000);
     }
+});
+
+// Add double-click for encryption help
+encryptBtn.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    const helpText = `🔐 ENCRYPTION FEATURE\n\n` +
+        `HOW IT WORKS:\n` +
+        `1. Click the lock button to toggle encryption\n` +
+        `2. When 🔐 is shown, encryption is ON\n` +
+        `3. When 🔓 is shown, encryption is OFF\n\n` +
+        `ENCRYPTION DETAILS:\n` +
+        `• Algorithm: AES-256-CBC\n` +
+        `• Your messages are encrypted on the server\n` +
+        `• Encrypted messages show a 🔐 icon\n` +
+        `• Only you control encryption for YOUR messages\n\n` +
+        `USE CASE:\n` +
+        `Send sensitive information securely. Other users will see encrypted text unless they have the decryption key.\n\n` +
+        `NOTE: This is a demonstration feature. For true end-to-end encryption, both sender and receiver need shared keys.`;
+    
+    alert(helpText);
 });
 
 // Request notification permission
@@ -824,3 +862,34 @@ setInterval(() => {
 }, 5000);
 
 console.log('💬 Chat client initialized');
+
+// ===== PM Encryption Handlers =====
+if (pmEncryptBtn) {
+    // PM Encryption toggle
+    pmEncryptBtn.addEventListener('click', () => {
+        isPMEncryptionEnabled = !isPMEncryptionEnabled;
+        
+        if (isPMEncryptionEnabled) {
+            pmEncryptBtn.textContent = '????';
+            pmEncryptBtn.title = 'PM Encryption ON - Messages are encrypted. Click to disable.';
+            pmEncryptBtn.classList.add('active');
+            showToast('???? PM Encryption ENABLED\n\nYour private messages will be encrypted.', 4000);
+        } else {
+            pmEncryptBtn.textContent = '????';
+            pmEncryptBtn.title = 'PM Encryption OFF - Messages sent as plain text. Click to enable.';
+            pmEncryptBtn.classList.remove('active');
+            showToast('???? PM Encryption DISABLED', 2000);
+        }
+    });
+
+    // PM Encryption double-click help
+    pmEncryptBtn.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        const helpText = `???? PRIVATE MESSAGE ENCRYPTION\n\n` +
+            `This encrypts YOUR private messages to a specific user.\n` +
+            `Uses AES-256-CBC encryption algorithm.\n\n` +
+            `???? = Encryption ON\n` +
+            `???? = Encryption OFF`;
+        alert(helpText);
+    });
+}

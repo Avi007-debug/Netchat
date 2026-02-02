@@ -33,7 +33,7 @@
     "password": "$2a$10$/IAcTgmUnEY6iERThXwScO4JYPdF/Xlm1vcM6fA2G3henpb/lcwpS",
     "createdAt": "2026-01-23T20:52:11.619Z",
     "status": "online",
-    "lastLogin": "2026-01-23T20:52:36.252Z"
+    "lastLogin": "2026-02-02T08:42:54.817Z"
   },
   {
     "id": "1769201652875",
@@ -42,6 +42,15 @@
     "password": "$2a$10$JXn45DTfHV9cBWscklb5TO0ykj0c3dOO6Lc04S71/3xiJoOClYt9u",
     "createdAt": "2026-01-23T20:54:12.875Z",
     "status": "online",
-    "lastLogin": "2026-01-23T20:54:43.789Z"
+    "lastLogin": "2026-02-02T08:43:08.272Z"
+  },
+  {
+    "id": "1770020423039",
+    "username": "sushant",
+    "email": "sushant@gmail.com",
+    "password": "$2a$10$r35ctIVWIp.udDiZk8ip0umlYSfBfxSf3LEUc3IibSYqjOnCFTnJO",
+    "createdAt": "2026-02-02T08:20:23.040Z",
+    "status": "offline",
+    "lastLogin": "2026-02-02T08:43:15.131Z"
   }
 ]

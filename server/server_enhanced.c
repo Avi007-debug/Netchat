@@ -12,14 +12,14 @@
 #include <mqueue.h>
 #include <semaphore.h>
 
-#define PORT 8080
+#define PORT 5555
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 #define LOG_FILE "chat.log"
 #define USERS_FILE "users.txt"
 #define MAX_ROOMS 5
 #define ROOM_NAME_LEN 30
-#define SHM_SIZE 4096
+#define SHM_SIZE 32768
 #define MAX_RECENT_MESSAGES 20
 #define MQ_NAME "/netchat_queue"
 #define MAX_MQ_MESSAGES 10
@@ -70,8 +70,29 @@ sem_t *connection_sem;
 
 /* Initialize shared memory */
 void init_shared_memory() {
-    key_t key = ftok("server.c", 65);
-    shm_id = shmget(key, SHM_SIZE, IPC_CREAT | 0666);
+    /* Use absolute path to ensure ftok works regardless of CWD */
+    key_t key = ftok("/tmp/netchat_key", 65);
+    if (key == -1) {
+        perror("ftok failed");
+        exit(1);
+    }
+    
+    printf("[DEBUG] ftok returned key=%d\n", (int)key);
+    fflush(stdout);
+    
+    /* Try to create new, if exists just get it */
+    shm_id = shmget(key, SHM_SIZE, IPC_CREAT | IPC_EXCL | 0666);
+    int is_new = (shm_id >= 0);
+    
+    printf("[DEBUG] First shmget: shm_id=%d, is_new=%d\n", shm_id, is_new);
+    fflush(stdout);
+    
+    /* If already exists, just get it */
+    if (!is_new) {
+        shm_id = shmget(key, SHM_SIZE, 0666);
+        printf("[DEBUG] Second shmget: shm_id=%d\n", shm_id);
+        fflush(stdout);
+    }
     
     if (shm_id < 0) {
         perror("shmget failed");
@@ -84,16 +105,42 @@ void init_shared_memory() {
         exit(1);
     }
     
-    /* Initialize shared memory structure */
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-    pthread_mutex_init(&shm_buffer->shm_lock, &attr);
+    printf("[DEBUG] shmat succeeded, shm_buffer=%p\n", (void*)shm_buffer);
+    fflush(stdout);
     
-    shm_buffer->message_count = 0;
-    shm_buffer->write_index = 0;
-    
-    printf("[IPC]: Shared memory initialized (ID: %d)\n", shm_id);
+    /* Only initialize mutex if newly created */
+    if (is_new) {
+        printf("[DEBUG] Zeroing shared memory\n");
+        fflush(stdout);
+        
+        /* Zero out the structure first */
+        memset(shm_buffer, 0, sizeof(SharedMessageBuffer));
+        
+        printf("[DEBUG] Initializing mutex attr\n");
+        fflush(stdout);
+        
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
+        if (pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED) != 0) {
+            perror("setpshared failed");
+            exit(1);
+        }
+        
+        printf("[DEBUG] Calling pthread_mutex_init\n");
+        fflush(stdout);
+        
+        if (pthread_mutex_init(&shm_buffer->shm_lock, &attr) != 0) {
+            perror("mutex_init failed");
+            exit(1);
+        }
+        pthread_mutexattr_destroy(&attr);
+        
+        shm_buffer->message_count = 0;
+        shm_buffer->write_index = 0;
+        printf("[IPC]: New shared memory created (ID: %d)\n", shm_id);
+    } else {
+        printf("[IPC]: Using existing shared memory (ID: %d)\n", shm_id);
+    }
 }
 
 /* Write message to shared memory */
@@ -131,6 +178,9 @@ void init_message_queue() {
     attr.mq_maxmsg = MAX_MQ_MESSAGES;
     attr.mq_msgsize = sizeof(QueuedMessage);
     attr.mq_curmsgs = 0;
+    
+    /* Try to unlink first in case it exists from crashed previous run */
+    mq_unlink(MQ_NAME);
     
     message_queue = mq_open(MQ_NAME, O_CREAT | O_RDWR, 0666, &attr);
     if (message_queue == (mqd_t)-1) {
@@ -188,6 +238,9 @@ void cleanup_message_queue() {
 
 /* Initialize semaphore */
 void init_semaphore() {
+    /* Unlink first in case it exists from crashed previous run */
+    sem_unlink("/netchat_sem");
+    
     connection_sem = sem_open("/netchat_sem", O_CREAT, 0666, MAX_CLIENTS);
     if (connection_sem == SEM_FAILED) {
         perror("sem_open failed");
@@ -212,6 +265,8 @@ void get_timestamp(char *buffer, size_t size) {
 }
 
 void log_message(const char *message) {
+    if (!log_file) return;  // Safety check
+    
     pthread_mutex_lock(&lock);
     if (log_file) {
         char timestamp[20];
@@ -219,11 +274,10 @@ void log_message(const char *message) {
         fprintf(log_file, "%s %s", timestamp, message);
         fflush(log_file);
     }
-    
-    /* Also write to shared memory */
-    write_to_shared_memory(message);
-    
     pthread_mutex_unlock(&lock);
+    
+    /* Also write to shared memory (disabled for stability) */
+    // write_to_shared_memory(message);
 }
 
 void broadcast(char *message, int sender_fd) {
@@ -561,11 +615,17 @@ void handle_client_process(int client_fd) {
 }
 
 int main() {
+    printf("[DEBUG] Starting main()\n");
+    fflush(stdout);
+    
     int client_fd;
     struct sockaddr_in server_addr;
     pid_t pid;
 
     /* Initialize mutex and log file */
+    printf("[DEBUG] Initializing pthread mutex\n");
+    fflush(stdout);
+    
     pthread_mutex_init(&lock, NULL);
     log_file = fopen(LOG_FILE, "a");
     if (!log_file) {
@@ -573,8 +633,16 @@ int main() {
     }
 
     /* Initialize IPC resources */
+    printf("[DEBUG] Calling init_shared_memory()\n");
+    fflush(stdout);
     init_shared_memory();
+    
+    printf("[DEBUG] Calling init_message_queue()\n");
+    fflush(stdout);
     init_message_queue();
+    
+    printf("[DEBUG] Calling init_semaphore()\n");
+    fflush(stdout);
     init_semaphore();
 
     /* Setup signal handler */
@@ -618,15 +686,26 @@ int main() {
     printf("╚════════════════════════════════════════════════════════════════╝\n\n");
     
     log_message("[Server]: Enhanced server started with IPC features\n");
+    printf("[DEBUG] Entering accept loop\n");
+    fflush(stdout);
 
     while (server_running) {
+        printf("[DEBUG] Waiting for semaphore...\n");
+        fflush(stdout);
+        
         /* Wait for semaphore (connection slot) */
         if (sem_wait(connection_sem) == -1) {
             perror("sem_wait failed");
             continue;
         }
+        
+        printf("[DEBUG] Got semaphore, calling accept...\n");
+        fflush(stdout);
 
         client_fd = accept(server_fd_global, NULL, NULL);
+        
+        printf("[DEBUG] Accept returned fd=%d\n", client_fd);
+        fflush(stdout);
         
         if (client_fd < 0) {
             if (server_running) {

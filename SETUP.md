@@ -4,6 +4,23 @@ Complete guide for installing, running, and testing NetChat.
 
 ---
 
+## 🎯 Quick Reference: Which Server Should I Use?
+
+| Feature | Web Server | Standard C Server | Enhanced C Server |
+|---------|-----------|-------------------|-------------------|
+| **Purpose** | Modern web interface | Learn threading basics | Advanced OS concepts |
+| **Port** | 3000 | 8080 | 5555 |
+| **Architecture** | Node.js single process | Multi-threaded | Multi-process (forking) |
+| **Sync Mechanism** | N/A | Mutexes | Semaphores |
+| **IPC Methods** | WebSocket | File-based | Shared Memory + Message Queues |
+| **UI** | Browser (modern) | Terminal / telnet | Terminal / telnet |
+| **Best For** | Demos, production use | Learning pthreads | Learning fork(), IPC, semaphores |
+| **Prerequisites** | Node.js, npm | GCC, POSIX libs | GCC, librt |
+| **Concepts Learned** | WebSocket, JWT, crypto | Threading, mutex | Process management, IPC |
+| **Start Command** | `npm start` | `make run-server` | `make run-enhanced` |
+
+---
+
 ## 📋 Table of Contents
 
 1. [Prerequisites](#prerequisites)
@@ -94,25 +111,56 @@ node_modules/
   ...
 ```
 
-### Step 4: Compile C Server (Optional)
+### Step 4: Compile C Servers (Optional)
 
-**Standard Server**:
+#### Standard C Server (Multi-threaded)
+For learning basic threading and synchronization concepts:
+
+```bash
+# From project root
+make server
+```
+
+Or manually:
 ```bash
 cd server
 gcc server.c -o server -lpthread
 ```
 
-**Enhanced Server** (with OS features):
+**Features**:
+- Single process, multiple threads
+- Mutex-based synchronization
+- File-based IPC (users.txt, chat.log)
+- Runs on port 8080
+- Max 10 concurrent clients
+
+#### Enhanced C Server (Multi-process with IPC)
+For learning advanced OS concepts like shared memory, message queues, and process forking:
+
+```bash
+# From project root
+make enhanced
+```
+
+Or manually:
 ```bash
 cd server
 gcc server_enhanced.c -o server_enhanced -lpthread -lrt
 ```
 
-**Using Makefile** (if available):
+**Features**:
+- One process per client (forking)
+- Semaphore-based synchronization
+- POSIX Shared Memory (shmget/shmat)
+- POSIX Message Queues (mqueue)
+- Runs on port 5555
+- Max 10 concurrent clients
+- **Requires**: librt (real-time library)
+
+#### Build All Targets
 ```bash
-cd server
-make
-make enhanced
+# From project root - builds both servers and client
+make all
 ```
 
 ---
@@ -165,57 +213,194 @@ chmod 755 public/uploads
 
 ## ▶️ Running the Application
 
-### Option 1: Web Server Only (Recommended)
+### Option 1: Web Server Only (Recommended for Most Users)
+
+**Development Mode** (with auto-restart):
+```bash
+npm run dev
+```
 
 **Production Mode**:
 ```bash
 npm start
 ```
 
-**Development Mode** (auto-restart on changes):
-```bash
-npm run dev
-```
-
 Server runs at: `http://localhost:3000`
 
-### Option 2: C Server Only (Terminal Chat)
+**Features**: WebSocket, JWT auth, image sharing, encrypted messages, private chat
 
-**Standard Server**:
+---
+
+### Option 2: Standard C Server Only (Learning Threading)
+
+For students learning multi-threading and mutex synchronization:
+
+```bash
+# Compile and run from project root (EASIEST - recommended)
+make run-server
+```
+
+Alternative methods:
+
+**Method 2** - Manual compilation then run:
 ```bash
 cd server
 ./server
 ```
 
-**Enhanced Server** (with OS features):
+**Method 3** - Via telnet or netcat (for testing):
+```bash
+telnet localhost 8080
+# OR
+nc localhost 8080
+```
+
+**Connect as Client** (in separate terminal):
+```bash
+# Option A - Using Makefile (EASIEST)
+make run-client
+
+# Option B - Manual compilation then run
+cd client && ./client
+
+# Option C - Using telnet/netcat (if server running on port 8080)
+telnet localhost 8080
+nc localhost 8080
+```
+
+**Important**: Make sure you're in the project **root directory**, not the `server/` directory!
+
+✅ Correct:
+```bash
+~/Netchat $ make run-server
+```
+
+❌ Wrong:
+```bash
+~/Netchat/server $ make run-server  # Makefile not here!
+~/Netchat $ make run server         # Tries to find target "run" AND "server"
+```
+
+**What You'll Learn**:
+- POSIX threads (pthreads)
+- Mutex locks and synchronization
+- Thread-safe data structures
+- Socket programming
+- Signal handling
+
+---
+
+### Enhanced C Server (Learning Advanced IPC)
+
+For students learning process management, shared memory, message queues, and semaphores:
+
+**Step 1: Start the Enhanced Server** (from project root)
+```bash
+# First time setup - clean old IPC resources
+ipcrm -a 2>/dev/null
+sem_unlink /netchat_sem 2>/dev/null
+
+# Start the server
+make run-enhanced
+```
+
+The server will:
+- Listen on **port 5555**
+- Create fresh IPC resources (shared memory, message queues, semaphores)
+- Fork a new process for each client connection
+- Store recent messages in shared memory
+- Queue messages for offline users
+- Display `[Server]: <username> joined #general (Process: <PID>)` for each connection
+
+**Step 2: Connect with Client** (in another terminal, from project root)
+```bash
+make run-client
+```
+
+The client will automatically connect to port 5555 (enhanced server).
+
+**To connect to standard server instead** (port 8080):
+```bash
+CLIENT_PORT=8080 ./client/client
+```
+
+**Alternative manual methods:**
+
+Manual compilation and run:
 ```bash
 cd server
 ./server_enhanced
 ```
 
-Server listens on: `localhost:5555`
-
-**Connect as Client**:
+Via telnet or netcat (in another terminal):
 ```bash
 telnet localhost 5555
-# OR
 nc localhost 5555
 ```
 
-### Option 3: Both Servers (Full Experience)
+**Important**: Make sure you're in the project **root directory**, not the `server/` directory!
 
-**Terminal 1** (C Server):
+✅ Correct:
 ```bash
-cd server
-./server_enhanced
+~/Netchat $ make run-enhanced
+~/Netchat $ make run-client
 ```
 
-**Terminal 2** (Web Server):
+❌ Wrong:
+```bash
+~/Netchat/server $ make run-enhanced  # Makefile not here!
+~/Netchat $ make run enhanced         # Tries to find target "run" AND "enhanced"
+```
+
+**Troubleshooting - Server won't start (Address already in use)**
+
+If you get "Bind failed: Address already in use", the port or IPC resources are still occupied:
+
+```bash
+# Kill any old processes
+pkill -f server_enhanced
+
+# Clean all IPC resources
+ipcrm -a 2>/dev/null
+sem_unlink /netchat_sem 2>/dev/null
+mq_unlink /netchat_queue 2>/dev/null
+
+# Wait a moment, then try again
+sleep 1
+make run-enhanced
+```
+
+**What You'll Learn**:
+- Process forking (fork())
+- Parent-child process relationships
+- POSIX Shared Memory (shmget/shmat/shmctl)
+- POSIX Message Queues (mq_open/mq_send/mq_receive)
+- Named Semaphores (sem_open/sem_wait/sem_post)
+- Process synchronization across multiple processes
+- Zombie process handling (wait/waitpid)
+
+---
+
+### Option 4: Complete Experience (All Servers)
+
+**Terminal 1** (Enhanced C Server on 5555):
+```bash
+make run-enhanced
+```
+
+**Terminal 2** (Web Server on 3000):
 ```bash
 npm start
 ```
 
-**Browser**: Navigate to `http://localhost:3000`
+**Terminal 3+** (C Clients connecting to C server):
+```bash
+make run-client
+```
+
+**Browser**: Navigate to `http://localhost:3000` for web interface
+
+**Note**: The web server and C servers are independent. They maintain separate user databases and chat rooms. Choose based on your learning needs!
 
 ---
 
@@ -432,7 +617,9 @@ ls -lh public/uploads/ | grep large_image
 
 ## 🐛 Troubleshooting
 
-### Issue: Port 3000 Already in Use
+### Web Server Issues
+
+#### Issue: Port 3000 Already in Use
 
 **Error**:
 ```
@@ -442,12 +629,12 @@ Error: listen EADDRINUSE: address already in use :::3000
 **Solution 1** - Kill existing process:
 ```bash
 # Find process on port 3000
-netstat -ano | findstr :3000      # Windows
 lsof -i :3000                     # Linux/Mac
+netstat -ano | findstr :3000      # Windows
 
 # Kill process
-taskkill /PID <PID> /F            # Windows
 kill -9 <PID>                     # Linux/Mac
+taskkill /PID <PID> /F            # Windows
 ```
 
 **Solution 2** - Change port:
@@ -456,9 +643,16 @@ kill -9 <PID>                     # Linux/Mac
 const PORT = process.env.PORT || 4000;  // Changed from 3000
 ```
 
+Or in `.env`:
+```env
+PORT=4000
+```
+
 ---
 
-### Issue: C Server Compilation Errors
+### Standard C Server (port 8080) Issues
+
+#### Issue: Compilation Error - undefined reference to `pthread_create`
 
 **Error**:
 ```
@@ -467,32 +661,140 @@ undefined reference to `pthread_create'
 
 **Solution**: Link pthread library
 ```bash
+# Using Makefile (from root)
+make server
+
+# Or manually
+cd server
 gcc server.c -o server -lpthread
 ```
+
+**Common on Linux**: pthread is in libc but needs explicit flag
+
+---
+
+### Enhanced C Server (port 5555) Issues
+
+#### Issue: Compilation Error - undefined reference to `mq_open`
 
 **Error**:
 ```
 undefined reference to `mq_open'
+undefined reference to `sem_open'
 ```
 
-**Solution**: Link realtime library (enhanced server)
+**Cause**: Missing real-time library
+
+**Solution**: Link librt library
 ```bash
+# Using Makefile (from root)
+make enhanced
+
+# Or manually
+cd server
 gcc server_enhanced.c -o server_enhanced -lpthread -lrt
 ```
+
+**Note**: The `-lrt` flag is essential for Enhanced server's IPC features
+
+---
+
+#### Issue: Shared Memory Already Exists
+
+**Error**:
+```
+shmat: File exists
+```
+
+**Cause**: Shared memory segments from previous runs still exist
+
+**Solution**: Clean up old IPC resources
+```bash
+# List all shared memory segments
+ipcs -m
+
+# Remove a specific segment (replace <id> with actual ID)
+ipcrm -m <id>
+
+# Or remove all message queues/semaphores
+ipcrm -a
+```
+
+---
+
+#### Issue: Permission Denied on Named Semaphore
+
+**Error**:
+```
+Operation not permitted
+```
+
+**Cause**: Previous semaphore not properly cleaned up
+
+**Solution**:
+```bash
+# List named semaphores (Linux)
+ls /dev/shm/sem.*
+
+# Remove specific semaphore
+rm /dev/shm/sem.netchat_*
+
+# Or use ps to find stale processes
+ps aux | grep server_enhanced
+kill -9 <PID>
+```
+
+---
+
+### General C Server Issues
+
+#### Issue: Build Tools Missing
 
 **Error**:
 ```
 fatal error: pthread.h: No such file or directory
 ```
 
-**Solution**: Install build tools
+**Solution**: Install compiler and build tools
 ```bash
 # Ubuntu/Debian
 sudo apt install build-essential
 
 # macOS
 xcode-select --install
+
+# Verify installation
+gcc --version
 ```
+
+---
+
+#### Issue: Cannot Connect to C Server
+
+**Error**:
+```
+Connection refused
+```
+
+**Diagnostic**:
+```bash
+# Check if server is running
+ps aux | grep server
+
+# Check if port is listening
+netstat -an | grep 8080    # Standard server
+netstat -an | grep 5555    # Enhanced server
+
+# Try connecting manually
+telnet localhost 8080
+nc localhost 5555
+```
+
+**Solutions**:
+1. Make sure server is actually running
+2. Check you're using the correct port
+3. Verify no firewall blocking
+4. Try `127.0.0.1` instead of `localhost`
 
 ---
 

@@ -643,7 +643,7 @@ io.on('connection', (socket) => {
 
   // ===== Private Message =====
   socket.on('pm:send', (data) => {
-    const { to, message } = data;
+    const { to, message, encrypted } = data;
 
     // Find target user
     let targetUserId = null;
@@ -658,14 +658,21 @@ io.on('connection', (socket) => {
     }
     
     if (targetSocketId) {
+      // Encrypt message if requested
+      let finalMessage = message;
+      if (encrypted) {
+        finalMessage = encryptMessage(message);
+      }
+      
       // Send PM to target user
       io.to(targetSocketId).emit('pm:received', {
         from: socket.username,
-        message: message,
+        message: finalMessage,
+        encrypted: encrypted || false,
         timestamp: new Date().toISOString()
       });
       
-      console.log(`💌 PM: ${socket.username} -> ${to}: ${message}`);
+      console.log(`💌 PM: ${socket.username} -> ${to}: ${encrypted ? '(encrypted)' : message}`);
     } else {
       // User not found
       socket.emit('error', { message: `User '${to}' not found or offline` });

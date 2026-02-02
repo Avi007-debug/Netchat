@@ -10,19 +10,31 @@ A dual-mode chat application demonstrating operating system concepts with both C
 
 ## 🎯 Features Overview
 
-### C Server (OS Concepts Demo)
+### C Servers - Two Flavors
+
+#### Standard C Server (`server.c`) - Simple Threading Demo
 - ✅ **Multi-threading**: pthread-based concurrent client handling
 - ✅ **TCP Sockets**: BSD socket programming (SOCK_STREAM)
 - ✅ **Mutex Synchronization**: Thread-safe shared resources
 - ✅ **Signal Handling**: Graceful SIGINT shutdown
 - ✅ **File I/O**: Persistent user authentication and message logging
-- ✅ **IPC - Shared Memory**: Cross-process message buffer (shmget/shmat)
-- ✅ **IPC - Message Queues**: Offline message delivery (POSIX mqueue)
-- ✅ **Process Forking**: Separate process per client connection
-- ✅ **Semaphores**: Connection control and resource management
 - ✅ **Chat Rooms**: Multi-room support with room management
 - ✅ **Private Messaging**: Direct user-to-user messaging
 - ✅ **Resource Management**: Client admission control (max 10 clients)
+- ⚠️ **Port**: 8080
+- ⚠️ **Process Model**: Single process, multiple threads
+- ⚠️ **IPC**: File-based only
+
+#### Enhanced C Server (`server_enhanced.c`) - Advanced OS Concepts
+*All features from Standard Server, PLUS:*
+- ✅ **IPC - Shared Memory**: Cross-process message buffer (shmget/shmat)
+- ✅ **IPC - Message Queues**: Offline message delivery (POSIX mqueue)
+- ✅ **Process Forking**: Separate process per client connection
+- ✅ **Semaphores**: Named semaphores for resource control
+- ✅ **Advanced Synchronization**: Complex process coordination
+- ⚠️ **Port**: 5555
+- ⚠️ **Process Model**: One process per client (forking architecture)
+- ⚠️ **Best For**: OS learning, advanced IPC demonstrations
 
 ### Web Server (Modern Interface)
 - ✅ **WebSocket**: Real-time bidirectional communication (Socket.IO)
@@ -49,27 +61,40 @@ See [FEATURES.md](FEATURES.md) for complete feature list.
 
 ## 🚀 Quick Start
 
-### Option 1: Web Server (Recommended for Demo)
+### Option 1: Web Server (Recommended for Most Users)
 
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Start server
+# 2. Start server (port 3000)
 npm start
 
 # 3. Open browser
 # Navigate to: http://localhost:3000
 ```
 
-### Option 2: C Socket Server (OS Concepts)
+### Option 2: Standard C Server (Simple Threading Demo)
 
 ```bash
 # 1. Compile
-make all
+make server
 
-# 2. Terminal 1 - Run server
+# 2. Terminal 1 - Run server (port 8080)
 make run-server
+
+# 3. Terminal 2+ - Run clients
+make run-client
+```
+
+### Option 3: Enhanced C Server (Advanced OS Concepts)
+
+```bash
+# 1. Compile
+make enhanced
+
+# 2. Terminal 1 - Run enhanced server (port 5555)
+make run-enhanced
 
 # 3. Terminal 2+ - Run clients
 make run-client
@@ -84,11 +109,14 @@ For detailed setup instructions, see [SETUP.md](SETUP.md).
 ```
 Netchat/
 ├── server/
-│   ├── server.c                # Original C server (threads)
-│   ├── server_enhanced.c       # Enhanced C server (IPC + forking)
-│   └── Makefile                # Build configuration
+│   ├── server.c                # Standard C server (multi-threaded)
+│   ├── server_enhanced.c       # Enhanced C server (multi-process, IPC, shared memory)
+│   ├── server_enhanced         # Compiled enhanced binary
+│   ├── server                  # Compiled standard binary
+│   └── chat.log                # Server message logs
 ├── client/
-│   └── client.c                # C client implementation
+│   ├── client.c                # C client implementation
+│   └── client                  # Compiled client binary
 ├── public/
 │   ├── index.html              # Login/register page
 │   ├── chat.html               # Main chat interface
@@ -100,54 +128,91 @@ Netchat/
 ├── server.js                   # Node.js web server
 ├── package.json                # Node.js dependencies
 ├── users.json                  # Web server user database
-├── chat.log                    # Server message logs
 ├── users.txt                   # C server user database
+├── Makefile                    # Build automation (root directory)
 ├── README.md                   # This file
 ├── FEATURES.md                 # Complete feature documentation
-└── SETUP.md                    # Installation & setup guide
+├── SETUP.md                    # Installation & setup guide
+└── .env                        # Environment configuration
 ```
 
 ---
 
 ## 🎓 OS Concepts Demonstrated
 
-This project demonstrates essential operating system concepts:
+This project demonstrates essential operating system concepts across multiple implementations:
 
-| Concept | Implementation | File |
-|---------|---------------|------|
-| **Multi-threading** | pthread library for concurrent clients | server.c |
-| **Socket Programming** | TCP/IP BSD sockets | server.c, client.c |
-| **Mutex Synchronization** | pthread_mutex for thread safety | server.c |
-| **Shared Memory (IPC)** | shmget/shmat for cross-process buffer | server_enhanced.c |
-| **Message Queues (IPC)** | POSIX mqueue for async delivery | server_enhanced.c |
-| **Process Forking** | fork() for separate client processes | server_enhanced.c |
-| **Semaphores** | Named semaphores for resource control | server_enhanced.c |
-| **Signal Handling** | SIGINT for graceful shutdown | server.c |
-| **File I/O** | Read/write user data and logs | server.c, server.js |
-| **Session Management** | Single-session enforcement | server.js |
-| **Stream Processing** | Multer file streams for uploads | server.js |
-| **Encryption** | AES-256-CBC message encryption | server.js |
+### Standard Server (`server.c`) - Fundamental Concepts
+
+| Concept | Implementation | Used For |
+|---------|---------------|----------|
+| **Multi-threading** | pthread library for concurrent clients | Core threading model |
+| **Socket Programming** | TCP/IP BSD sockets (SOCK_STREAM) | Network fundamentals |
+| **Mutex Synchronization** | pthread_mutex for thread safety | Race condition prevention |
+| **Shared Memory** | Global arrays protected by mutex | Thread-safe data sharing |
+| **Signal Handling** | SIGINT for graceful shutdown | Process signal handling |
+| **File I/O** | Read/write users.txt and chat.log | Persistent storage |
+
+### Enhanced Server (`server_enhanced.c`) - Advanced Concepts
+
+*All concepts from Standard Server, plus:*
+
+| Concept | Implementation | Used For |
+|---------|---------------|----------|
+| **Process Forking** | fork() for separate client processes | Parent-child relationships |
+| **Shared Memory (IPC)** | shmget/shmat for cross-process buffer | Inter-process communication |
+| **Message Queues (IPC)** | POSIX mqueue for offline delivery | Async message passing |
+| **Semaphores** | Named semaphores for resource control | Process synchronization |
+| **Process Groups** | getpgrp() and signal handling | Process management |
+| **Zombie Process Handling** | wait()/waitpid() cleanup | Process lifecycle |
+
+### Web Server (`server.js`) - Modern Concepts
+
+| Concept | Implementation | Used For |
+|---------|---------------|----------|
+| **Session Management** | Single-session enforcement | Security best practices |
+| **Stream Processing** | Multer file streams for uploads | Efficient file handling |
+| **Authentication** | JWT tokens with 24hr expiry | Secure communication |
+| **Encryption** | AES-256-CBC message encryption | Data privacy |
+| **WebSocket Protocol** | Socket.IO for real-time comm | Modern async I/O |
+| **Hash Functions** | Bcrypt (10 rounds) for passwords | Cryptography fundamentals |
 
 ---
 
 ## 🛠️ Technology Stack
 
-### C Server
+### Standard C Server (`server.c`)
 - **Language**: C (C11 standard)
+- **Architecture**: Multi-threaded (single process)
 - **Threading**: POSIX threads (pthread)
-- **Networking**: BSD Sockets (TCP/IP)
-- **IPC**: POSIX Shared Memory & Message Queues
-- **Synchronization**: Mutexes & Semaphores
-- **Port**: 8080
+- **Networking**: BSD Sockets (TCP/IP, port 8080)
+- **Synchronization**: Mutexes only
+- **IPC**: File-based (users.txt, chat.log)
 - **Max Clients**: 10 concurrent
-- **Buffer Size**: 1024 bytes
+- **Best For**: Learning threading & synchronization
+- **Compile**: `make server` or `make run-server`
 
-### Web Server
+### Enhanced C Server (`server_enhanced.c`)
+- **Language**: C (C11 standard)
+- **Architecture**: Multi-process (fork per client)
+- **Process Management**: Parent-child, process groups
+- **Networking**: BSD Sockets (TCP/IP, port 5555)
+- **IPC**: Shared Memory + Message Queues + Semaphores
+- **Synchronization**: Named semaphores
+- **Max Clients**: 10 concurrent
+- **Best For**: Learning advanced OS concepts (IPC, process management)
+- **Compile**: `make enhanced` or `make run-enhanced`
+- **Dependencies**: librt (real-time POSIX library)
+
+### Web Server (`server.js`)
 - **Runtime**: Node.js (v14+)
 - **Framework**: Express.js
 - **Real-time**: Socket.IO (WebSockets)
-- **Authentication**: JWT + Bcrypt
-- **File Upload**: Multer
+- **Authentication**: JWT + Bcrypt (10 salt rounds)
+- **File Upload**: Multer (5MB limit)
+- **Port**: 3000
+- **Message Encryption**: AES-256-CBC (optional)
+- **Session Management**: Anti-hijacking duplicate login prevention
 - **Encryption**: Node.js crypto (AES-256-CBC)
 - **Port**: 3000
 - **Transport**: HTTP + WebSocket

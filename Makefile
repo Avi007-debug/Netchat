@@ -48,7 +48,9 @@ run-enhanced: enhanced
 
 run-client: client
 	@echo "🚀 Starting C client..."
-	@cd client && ./client
+	@echo "   Connecting to ENHANCED server (port 5555)"
+	@echo "   For standard server (port 8080), run: CLIENT_PORT=8080 ./client/client"
+	@./client/client
 
 web:
 	@echo "🌐 Starting web server on port 3000..."

@@ -5,7 +5,17 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#define PORT 8080
+/* Default to enhanced server on 5555
+   To connect to standard server (8080), compile with: gcc -DUSE_STANDARD_SERVER client.c
+   Or set environment variable: export CLIENT_PORT=8080
+*/
+#ifdef USE_STANDARD_SERVER
+#define DEFAULT_PORT 8080
+#else
+#define DEFAULT_PORT 5555
+#endif
+
+int PORT;
 #define BUFFER_SIZE 1024
 
 int sockfd;
@@ -26,6 +36,10 @@ void *receive_messages(void *arg) {
 }
 
 int main() {
+    /* Determine which server to connect to */
+    const char *env_port = getenv("CLIENT_PORT");
+    PORT = env_port ? atoi(env_port) : DEFAULT_PORT;
+    
     struct sockaddr_in server_addr;
     pthread_t recv_thread;
     char message[BUFFER_SIZE];
@@ -33,6 +47,7 @@ int main() {
     char password[50];
 
     printf("=== NetChat Client ===\n");
+    printf("Connecting to server on port %d...\n", PORT);
     printf("Enter your username: ");
     fgets(username, 50, stdin);
     username[strcspn(username, "\n")] = 0;   // remove newline
