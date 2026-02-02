@@ -258,7 +258,7 @@ nc localhost 8080
 **Connect as Client** (in separate terminal):
 ```bash
 # Option A - Using Makefile (EASIEST)
-make run-client
+make run-client CLIENT_PORT=8080
 
 # Option B - Manual compilation then run
 cd client && ./client
@@ -378,6 +378,36 @@ make run-enhanced
 - Named Semaphores (sem_open/sem_wait/sem_post)
 - Process synchronization across multiple processes
 - Zombie process handling (wait/waitpid)
+
+### C Server Commands Reference
+
+**Available Commands** (both Standard and Enhanced servers):
+
+**Room Management**:
+- `/join <roomname>` - Switch to or create a room
+- `/room` - Display current room
+- `/rooms` - List all active rooms with user counts
+- `/users` - List users in current room
+
+**Messaging**:
+- `/pm <user> <msg>` - Send private message
+- `/recent` - Show recent messages (Enhanced server only)
+
+**Utility**:
+- `/help` - Show command menu
+- `/quit` - Disconnect gracefully
+
+**Example Session**:
+```
+Connected to server...
+alice
+password
+/rooms
+/join oslab
+/users
+hello team
+/quit
+```
 
 ---
 

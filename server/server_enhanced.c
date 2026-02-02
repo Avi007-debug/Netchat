@@ -495,7 +495,7 @@ void handle_client_process(int client_fd) {
     }
 
     /* Send welcome message */
-    char welcome[BUFFER_SIZE * 2];
+    char welcome[BUFFER_SIZE * 3];
     snprintf(welcome, sizeof(welcome),
         "\n╔════════════════════════════════════════════════════════════════╗\n"
         "║           🎉 WELCOME TO NETCHAT (ENHANCED)! 🎉               ║\n"
@@ -505,6 +505,27 @@ void handle_client_process(int client_fd) {
         "║  💾 Shared memory enabled for message history                ║\n"
         "║  📨 Message queue active for offline delivery                ║\n"
         "║  🔐 Semaphore controlling concurrent connections             ║\n"
+        "╚════════════════════════════════════════════════════════════════╝\n\n"
+        "╔════════════════════════════════════════════════════════════════╗\n"
+        "║                     AVAILABLE COMMANDS                         ║\n"
+        "╠════════════════════════════════════════════════════════════════╣\n"
+        "║                                                                ║\n"
+        "║  💬 MESSAGING:                                                 ║\n"
+        "║     • Type normally to send message to current room           ║\n"
+        "║     • /pm <user> <message>  - Send private message            ║\n"
+        "║                                                                ║\n"
+        "║  🏢 ROOMS:                                                     ║\n"
+        "║     • /room                 - Show current room               ║\n"
+        "║     • /join <roomname>      - Join/create a room              ║\n"
+        "║     • /rooms                - List all active rooms           ║\n"
+        "║     • /recent               - Show recent messages from memory ║\n"
+        "║                                                                ║\n"
+        "║  👥 USERS:                                                     ║\n"
+        "║     • /users                - List users in current room      ║\n"
+        "║                                                                ║\n"
+        "║  ℹ️  HELP:                                                      ║\n"
+        "║     • /help                 - Show this menu again            ║\n"
+        "║                                                                ║\n"
         "╚════════════════════════════════════════════════════════════════╝\n\n",
         getpid());
     send(client_fd, welcome, strlen(welcome), 0);
@@ -557,6 +578,33 @@ void handle_client_process(int client_fd) {
                 }
             }
         }
+        else if (strncmp(buffer, "/help", 5) == 0 && (buffer[5] == '\n' || buffer[5] == '\0')) {
+            /* Show help menu */
+            char help_menu[BUFFER_SIZE * 2];
+            snprintf(help_menu, sizeof(help_menu),
+                "\n╔════════════════════════════════════════════════════════════════╗\n"
+                "║                     AVAILABLE COMMANDS                         ║\n"
+                "╠════════════════════════════════════════════════════════════════╣\n"
+                "║                                                                ║\n"
+                "║  💬 MESSAGING:                                                 ║\n"
+                "║     • Type normally to send message to current room           ║\n"
+                "║     • /pm <user> <message>  - Send private message            ║\n"
+                "║                                                                ║\n"
+                "║  🏢 ROOMS:                                                     ║\n"
+                "║     • /room                 - Show current room               ║\n"
+                "║     • /join <roomname>      - Join/create a room              ║\n"
+                "║     • /rooms                - List all active rooms           ║\n"
+                "║     • /recent               - Show recent messages from memory ║\n"
+                "║                                                                ║\n"
+                "║  👥 USERS:                                                     ║\n"
+                "║     • /users                - List users in current room      ║\n"
+                "║                                                                ║\n"
+                "║  ℹ️  HELP:                                                      ║\n"
+                "║     • /help                 - Show this menu again            ║\n"
+                "║                                                                ║\n"
+                "╚════════════════════════════════════════════════════════════════╝\n\n");
+            send(client_fd, help_menu, strlen(help_menu), 0);
+        }
         else if (strncmp(buffer, "/recent", 7) == 0) {
             /* Show recent messages from shared memory */
             if (shm_buffer != NULL) {
@@ -570,6 +618,132 @@ void handle_client_process(int client_fd) {
                 pthread_mutex_unlock(&shm_buffer->shm_lock);
                 send(client_fd, recent, strlen(recent), 0);
             }
+        }
+        else if (strncmp(buffer, "/join ", 6) == 0) {
+            /* Join/create a room */
+            char room_name[ROOM_NAME_LEN];
+            char *room_str = buffer + 6;
+            room_str[strcspn(room_str, "\n")] = 0;
+            
+            if (strlen(room_str) > 0) {
+                pthread_mutex_lock(&lock);
+                if (client_index >= 0) {
+                    char old_room[ROOM_NAME_LEN];
+                    strcpy(old_room, clients[client_index].room);
+                    strncpy(clients[client_index].room, room_str, ROOM_NAME_LEN - 1);
+                    pthread_mutex_unlock(&lock);
+                    
+                    /* Notify room left */
+                    char leaving_msg[BUFFER_SIZE];
+                    snprintf(leaving_msg, sizeof(leaving_msg), 
+                        "[Server]: %s has left #%s\n", username, old_room);
+                    broadcast_room(leaving_msg, -1, old_room);
+                    
+                    /* Notify room joined */
+                    char joining_msg[BUFFER_SIZE];
+                    snprintf(joining_msg, sizeof(joining_msg), 
+                        "[Server]: %s has joined #%s\n", username, room_str);
+                    broadcast_room(joining_msg, -1, room_str);
+                    
+                    /* Confirm to user */
+                    char confirm[BUFFER_SIZE];
+                    snprintf(confirm, sizeof(confirm), 
+                        "[Server]: You are now in room #%s\n", room_str);
+                    send(client_fd, confirm, strlen(confirm), 0);
+                } else {
+                    pthread_mutex_unlock(&lock);
+                }
+            } else {
+                char *err = "[Server]: Room name cannot be empty.\n";
+                send(client_fd, err, strlen(err), 0);
+            }
+        }
+        else if (strncmp(buffer, "/room", 5) == 0 && (buffer[5] == '\n' || buffer[5] == '\0')) {
+            /* Show current room */
+            pthread_mutex_lock(&lock);
+            char current_room[ROOM_NAME_LEN];
+            if (client_index >= 0) {
+                strcpy(current_room, clients[client_index].room);
+            } else {
+                strcpy(current_room, "unknown");
+            }
+            pthread_mutex_unlock(&lock);
+            
+            char response[BUFFER_SIZE];
+            snprintf(response, sizeof(response), 
+                "[Server]: You are currently in room #%s\n", current_room);
+            send(client_fd, response, strlen(response), 0);
+        }
+        else if (strncmp(buffer, "/rooms", 6) == 0 && (buffer[6] == '\n' || buffer[6] == '\0')) {
+            /* List all active rooms */
+            pthread_mutex_lock(&lock);
+            char rooms_list[BUFFER_SIZE * 2];
+            strcpy(rooms_list, "\n[Active Rooms]:\n");
+            
+            /* Count users per room */
+            char room_names[MAX_ROOMS][ROOM_NAME_LEN];
+            int room_counts[MAX_ROOMS] = {0};
+            int room_count = 0;
+            
+            for (int i = 0; i < client_count; i++) {
+                int found = 0;
+                for (int j = 0; j < room_count; j++) {
+                    if (strcmp(room_names[j], clients[i].room) == 0) {
+                        room_counts[j]++;
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found && room_count < MAX_ROOMS) {
+                    strcpy(room_names[room_count], clients[i].room);
+                    room_counts[room_count]++;
+                    room_count++;
+                }
+            }
+            
+            pthread_mutex_unlock(&lock);
+            
+            /* Display rooms */
+            for (int i = 0; i < room_count; i++) {
+                char room_info[BUFFER_SIZE];
+                snprintf(room_info, sizeof(room_info), 
+                    "  • #%s (%d user%s)\n", 
+                    room_names[i], 
+                    room_counts[i],
+                    room_counts[i] != 1 ? "s" : "");
+                strcat(rooms_list, room_info);
+            }
+            
+            strcat(rooms_list, "\n");
+            send(client_fd, rooms_list, strlen(rooms_list), 0);
+        }
+        else if (strncmp(buffer, "/users", 6) == 0 && (buffer[6] == '\n' || buffer[6] == '\0')) {
+            /* List users in current room */
+            pthread_mutex_lock(&lock);
+            char current_room[ROOM_NAME_LEN];
+            if (client_index >= 0) {
+                strcpy(current_room, clients[client_index].room);
+            } else {
+                strcpy(current_room, "general");
+            }
+            
+            char users_list[BUFFER_SIZE * 2];
+            snprintf(users_list, sizeof(users_list), 
+                "\n[Users in #%s]:\n", current_room);
+            
+            for (int i = 0; i < client_count; i++) {
+                if (strcmp(clients[i].room, current_room) == 0) {
+                    char user_info[BUFFER_SIZE];
+                    snprintf(user_info, sizeof(user_info), 
+                        "  • %s\n", clients[i].username);
+                    strcat(users_list, user_info);
+                }
+            }
+            
+            pthread_mutex_unlock(&lock);
+            
+            strcat(users_list, "\n");
+            send(client_fd, users_list, strlen(users_list), 0);
         }
         else {
             /* Regular message */

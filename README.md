@@ -18,8 +18,8 @@ A dual-mode chat application demonstrating operating system concepts with both C
 - ✅ **Mutex Synchronization**: Thread-safe shared resources
 - ✅ **Signal Handling**: Graceful SIGINT shutdown
 - ✅ **File I/O**: Persistent user authentication and message logging
-- ✅ **Chat Rooms**: Multi-room support with room management
-- ✅ **Private Messaging**: Direct user-to-user messaging
+- ✅ **Chat Rooms**: Multi-room support with `/join`, `/room`, `/rooms`, `/users` commands
+- ✅ **Private Messaging**: Direct user-to-user messaging via `/pm` command
 - ✅ **Resource Management**: Client admission control (max 10 clients)
 - ⚠️ **Port**: 8080
 - ⚠️ **Process Model**: Single process, multiple threads

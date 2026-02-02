@@ -70,7 +70,44 @@ make help         # Full documentation
 
 ---
 
-### 3. Environment Configuration 🟡
+### 4. Room Management Commands ✅ COMPLETED
+**Status**: Fully implemented for C servers (Standard & Enhanced)
+
+**What Was Added**:
+- ✅ `/join <roomname>` - Join/create rooms
+  - Auto-creates rooms on first join
+  - Broadcasts join/leave notifications
+  - Supports up to 5 concurrent rooms
+  
+- ✅ `/room` - Show current room
+  - Displays formatted response with room name
+  - Helps users verify room location
+  
+- ✅ `/rooms` - List active rooms
+  - Shows all rooms with user counts
+  - Real-time updates as users join/leave
+  
+- ✅ `/users` - List room members
+  - Shows usernames in current room
+  - Helps find available chat partners
+
+**Features**:
+- ✅ Thread-safe room management with mutex protection
+- ✅ Room-based message broadcasting
+- ✅ Auto notifications for join/leave events
+- ✅ Message prefix includes room context: `[HH:MM:SS] [#roomname] user: msg`
+- ✅ Works on both Standard (threaded) and Enhanced (forked) servers
+
+**Completed Implementation**:
+- ✅ Commands added to server_enhanced.c (lines 622-750)
+- ✅ Commands added to server.c (already present)
+- ✅ Tested with C client successfully
+- ✅ Compiled without errors
+- ✅ Full documentation in FEATURES.md and SETUP.md
+
+---
+
+### 5. Environment Configuration 🟡
 **Status**: Hard-coded values, no .env file
 
 **Todo**:

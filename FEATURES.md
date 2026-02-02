@@ -78,6 +78,46 @@ This document provides a comprehensive list of ALL features in NetChat, from maj
 - **Logging**: All PMs logged to chat.log
 - **Privacy**: Only sender and recipient see messages
 
+---
+
+## 🎮 C Server Commands Quick Reference
+
+### Room Management Commands
+- **`/join <roomname>`** - Switch to or create a new room
+  - Auto-creates room if it doesn't exist
+  - Notifies users of join/leave events
+  - Max 5 concurrent rooms supported
+  
+- **`/room`** - Show your current room
+  - Returns: "You are currently in room #roomname"
+  
+- **`/rooms`** - List all active rooms with user counts
+  - Format: `• #roomname (N users)`
+  - Real-time updates as users join/leave
+  
+- **`/users`** - List users in your current room
+  - Format: `• username`
+  - Shows only room members
+
+### Messaging Commands
+- **`/pm <username> <message>`** - Send private message
+  - Queued for offline delivery (enhanced server)
+  - Example: `/pm alice Hello there!`
+  
+- **`/recent`** - View recent messages (Enhanced Server Only)
+  - Shows last 20 messages from shared memory
+  - Access full chat history
+
+### Utility Commands
+- **`/help`** - Display command menu
+- **`/quit`** - Disconnect gracefully
+
+### Message Format
+All messages include timestamp and room prefix:
+```
+[HH:MM:SS] [#roomname] username: message
+```
+
 ### Implementation Details
 - **No Room Broadcast**: PMs never appear in public chat
 - **Client-side Storage**: Web client stores PM history locally
