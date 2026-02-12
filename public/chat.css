@@ -640,9 +640,9 @@ body {
 
 .pm-modal-content {
     background: white;
-    width: 90%;
-    max-width: 500px;
-    height: 600px;
+    width: 95%;
+    max-width: 700px;
+    height: 75vh;
     border-radius: 10px;
     display: flex;
     flex-direction: column;
@@ -735,6 +735,35 @@ body {
 .pm-sent .pm-msg-text {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
+}
+
+/* Encrypted PM message bubble */
+.pm-msg-text.pm-encrypted-bubble {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pm-msg-text.pm-encrypted-bubble:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+}
+
+.pm-msg-text.pm-encrypted-bubble .lock-icon {
+    font-size: 16px;
+}
+
+.pm-msg-text.pm-encrypted-bubble .encrypted-text {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.pm-msg-text.pm-encrypted-bubble.decrypted {
+    background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
 }
 
 /* PM Image Container */

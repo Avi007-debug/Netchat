@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PM Encryption Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .test { margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
+        .pass { background: #d4edda; border-color: #28a745; }
+        .fail { background: #f8d7da; border-color: #dc3545; }
+        input { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+        button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #764ba2; }
+        .output { background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 PM Encryption Test</h1>
+        
+        <div class="test">
+            <h3>Test 1: Encrypt & Decrypt</h3>
+            <input type="text" id="testText" placeholder="Text to encrypt" value="Hello World!">
+            <input type="password" id="testPassword" placeholder="Password" value="test123">
+            <button onclick="testEncryption()">Test Encrypt/Decrypt</button>
+            <div id="test1Result" class="output"></div>
+        </div>
+
+        <div class="test">
+            <h3>Test 2: Round-trip Verification</h3>
+            <button onclick="testRoundTrip()">Test 10 Round-trips</button>
+            <div id="test2Result" class="output"></div>
+        </div>
+
+        <div class="test">
+            <h3>Test 3: Special Characters</h3>
+            <button onclick="testSpecialChars()">Test Special Characters</button>
+            <div id="test3Result" class="output"></div>
+        </div>
+
+        <div class="test">
+            <h3>Test 4: Server-side Decryption</h3>
+            <input type="text" id="serverText" placeholder="Text" value="Hello Server!">
+            <input type="password" id="serverPassword" placeholder="Password" value="mypass">
+            <button onclick="testServerDecryption()">Test Server Decryption</button>
+            <div id="test4Result" class="output"></div>
+        </div>
+    </div>
+
+    <script>
+        // Copy the encryption functions from chat.js
+        function encryptMessage(text, password) {
+            try {
+                if (!password) throw new Error('Password required');
+                
+                let hash = 0;
+                for (let i = 0; i < password.length; i++) {
+                    hash = ((hash << 5) - hash) + password.charCodeAt(i);
+                    hash = hash & hash;
+                }
+                
+                hash = Math.abs(hash);
+                
+                let encrypted = '';
+                for (let i = 0; i < text.length; i++) {
+                    const charCode = text.charCodeAt(i);
+                    const keyByte = (hash >> ((i * 7) % 32)) & 0xFF;
+                    encrypted += String.fromCharCode(charCode ^ keyByte);
+                }
+                
+                return btoa(encrypted);
+            } catch (error) {
+                console.error('Encryption error:', error);
+                throw new Error('Encryption failed');
+            }
+        }
+
+        function decryptMessage(encryptedText, password) {
+            try {
+                if (!password) throw new Error('Password required');
+                
+                let hash = 0;
+                for (let i = 0; i < password.length; i++) {
+                    hash = ((hash << 5) - hash) + password.charCodeAt(i);
+                    hash = hash & hash;
+                }
+                
+                hash = Math.abs(hash);
+                
+                const encrypted = atob(encryptedText);
+                
+                let decrypted = '';
+                for (let i = 0; i < encrypted.length; i++) {
+                    const charCode = encrypted.charCodeAt(i);
+                    const keyByte = (hash >> ((i * 7) % 32)) & 0xFF;
+                    decrypted += String.fromCharCode(charCode ^ keyByte);
+                }
+                
+                return decrypted;
+            } catch (error) {
+                console.error('Decryption error:', error);
+                throw new Error('Decryption failed - wrong password or corrupted message');
+            }
+        }
+
+        function testEncryption() {
+            const text = document.getElementById('testText').value;
+            const password = document.getElementById('testPassword').value;
+            const result = document.getElementById('test1Result');
+            
+            try {
+                const encrypted = encryptMessage(text, password);
+                const decrypted = decryptMessage(encrypted, password);
+                
+                const passed = decrypted === text;
+                result.className = 'output ' + (passed ? 'pass' : 'fail');
+                result.textContent = `Original: ${text}\nEncrypted: ${encrypted}\nDecrypted: ${decrypted}\n\n${passed ? '✅ PASS' : '❌ FAIL'}`;
+            } catch (error) {
+                result.className = 'output fail';
+                result.textContent = `❌ ERROR: ${error.message}`;
+            }
+        }
+
+        function testRoundTrip() {
+            const text = "Test message";
+            const password = "secure123";
+            const result = document.getElementById('test2Result');
+            
+            try {
+                let current = text;
+                for (let i = 0; i < 10; i++) {
+                    current = decryptMessage(encryptMessage(current, password), password);
+                }
+                
+                const passed = current === text;
+                result.className = 'output ' + (passed ? 'pass' : 'fail');
+                result.textContent = `Original: ${text}\nAfter 10 round-trips: ${current}\n\n${passed ? '✅ PASS' : '❌ FAIL'}`;
+            } catch (error) {
+                result.className = 'output fail';
+                result.textContent = `❌ ERROR: ${error.message}`;
+            }
+        }
+
+        function testSpecialChars() {
+            const testCases = [
+                "Hello! @#$%^&*()",
+                "你好世界 🎉",
+                "Line1\\nLine2",
+                "Tab\\there",
+                "Quote'and\"marks"
+            ];
+            
+            const result = document.getElementById('test3Result');
+            let allPassed = true;
+            let output = "";
+            
+            testCases.forEach((text, i) => {
+                try {
+                    const encrypted = encryptMessage(text, "pass123");
+                    const decrypted = decryptMessage(encrypted, "pass123");
+                    const passed = decrypted === text;
+                    allPassed = allPassed && passed;
+                    output += `Test ${i+1}: ${passed ? '✅' : '❌'} "${text}"\n`;
+                } catch (error) {
+                    allPassed = false;
+                    output += `Test ${i+1}: ❌ ERROR\n`;
+                }
+            });
+            
+            result.className = 'output ' + (allPassed ? 'pass' : 'fail');
+            result.textContent = output + (allPassed ? '\n✅ ALL PASSED' : '\n❌ SOME FAILED');
+        }
+
+        async function testServerDecryption() {
+            const text = document.getElementById('serverText').value;
+            const password = document.getElementById('serverPassword').value;
+            const result = document.getElementById('test4Result');
+            
+            try {
+                // First, check if user is logged in
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    result.className = 'output fail';
+                    result.textContent = '❌ Not logged in. Please login first.';
+                    return;
+                }
+                
+                // Encrypt locally
+                const encrypted = encryptMessage(text, password);
+                result.textContent = `Encrypted: ${encrypted}\nSending to server...`;
+                
+                // Send to server for decryption
+                const response = await fetch('/api/decrypt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        encryptedMessage: encrypted,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const passed = data.decryptedMessage === text;
+                    result.className = 'output ' + (passed ? 'pass' : 'fail');
+                    result.textContent = `Original: ${text}\nServer Decrypted: ${data.decryptedMessage}\n\n${passed ? '✅ PASS' : '❌ FAIL'}`;
+                } else {
+                    result.className = 'output fail';
+                    result.textContent = `❌ Server Error: ${data.message}`;
+                }
+            } catch (error) {
+                result.className = 'output fail';
+                result.textContent = `❌ ERROR: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

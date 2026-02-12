@@ -203,23 +203,31 @@ socket.on('error', (error) => {
 
 // ===== Encryption Functions (Client-side) =====
 
-// Simple client-side encryption using base64 + XOR (for browser compatibility)
+// Simple client-side encryption using XOR cipher (for browser compatibility)
 function encryptMessage(text, password) {
     try {
         if (!password) throw new Error('Password required');
         
-        // Simple encryption: base64 encode + password hash
-        // Note: This is a simple cipher. For production, use TweetNaCl.js or libsodium.js
-        const encoded = btoa(text); // Base64 encode
-        const hash = password.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
-        
-        // Simple XOR cipher
-        let encrypted = '';
-        for (let i = 0; i < encoded.length; i++) {
-            encrypted += String.fromCharCode(encoded.charCodeAt(i) ^ (hash >> (i % 32)) & 0xFF);
+        // Create a more reliable hash from password
+        let hash = 0;
+        for (let i = 0; i < password.length; i++) {
+            hash = ((hash << 5) - hash) + password.charCodeAt(i);
+            hash = hash & hash; // Convert to 32bit integer
         }
         
-        return btoa(encrypted); // Base64 encode the result
+        // Use Math.abs to ensure positive value for XOR
+        hash = Math.abs(hash);
+        
+        // Simple XOR cipher on original text
+        let encrypted = '';
+        for (let i = 0; i < text.length; i++) {
+            const charCode = text.charCodeAt(i);
+            const keyByte = (hash >> ((i * 7) % 32)) & 0xFF;
+            encrypted += String.fromCharCode(charCode ^ keyByte);
+        }
+        
+        // Base64 encode the encrypted result for safe transmission
+        return btoa(encrypted);
     } catch (error) {
         console.error('Encryption error:', error);
         throw new Error('Encryption failed');
@@ -230,16 +238,28 @@ function decryptMessage(encryptedText, password) {
     try {
         if (!password) throw new Error('Password required');
         
-        const hash = password.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
-        const encrypted = atob(encryptedText); // Base64 decode
-        
-        // Simple XOR decipher
-        let decrypted = '';
-        for (let i = 0; i < encrypted.length; i++) {
-            decrypted += String.fromCharCode(encrypted.charCodeAt(i) ^ (hash >> (i % 32)) & 0xFF);
+        // Recreate the same hash
+        let hash = 0;
+        for (let i = 0; i < password.length; i++) {
+            hash = ((hash << 5) - hash) + password.charCodeAt(i);
+            hash = hash & hash; // Convert to 32bit integer
         }
         
-        return atob(decrypted); // Base64 decode
+        // Use Math.abs to ensure positive value for XOR
+        hash = Math.abs(hash);
+        
+        // Base64 decode the encrypted text
+        const encrypted = atob(encryptedText);
+        
+        // Simple XOR decipher (XOR is symmetric)
+        let decrypted = '';
+        for (let i = 0; i < encrypted.length; i++) {
+            const charCode = encrypted.charCodeAt(i);
+            const keyByte = (hash >> ((i * 7) % 32)) & 0xFF;
+            decrypted += String.fromCharCode(charCode ^ keyByte);
+        }
+        
+        return decrypted;
     } catch (error) {
         console.error('Decryption error:', error);
         throw new Error('Decryption failed - wrong password or corrupted message');
@@ -737,7 +757,13 @@ function loadPMHistory(username) {
     
     if (pmMessagesMap.has(username)) {
         pmMessagesMap.get(username).forEach(pm => {
-            addPMToUI(username, pm.message, pm.timestamp, pm.type);
+            if (pm.imageUrl) {
+                addPMImageToUI(username, pm.imageUrl, pm.message, pm.timestamp, pm.type);
+            } else if (pm.encrypted) {
+                addEncryptedPMToUI(username, pm.message, pm.timestamp, pm.type);
+            } else {
+                addPMToUI(username, pm.message, pm.timestamp, pm.type);
+            }
         });
     }
 }
@@ -809,23 +835,12 @@ function sendPrivateMessage() {
     
     const timestamp = new Date().toISOString();
     
-    // Handle encryption if enabled
-    let finalMessage = message;
-    if (isPMEncryptionEnabled && finalMessage && pmEncryptionPassword) {
-        try {
-            // Encrypt on client side with user password
-            finalMessage = encryptMessage(finalMessage, pmEncryptionPassword);
-        } catch (error) {
-            showToast('❌ Encryption failed', 3000);
-            return;
-        }
-    }
-    
-    // Send to server
+    // Send to server (let server handle encryption like in group chat)
     socket.emit('pm:send', {
         to: currentPMUser,
-        message: finalMessage,
+        message: message,
         encrypted: isPMEncryptionEnabled,
+        encryptionPassword: isPMEncryptionEnabled ? pmEncryptionPassword : undefined,
         imageUrl: pmImageUrl
     });
     
@@ -834,19 +849,19 @@ function sendPrivateMessage() {
         pmMessagesMap.set(currentPMUser, []);
     }
     pmMessagesMap.get(currentPMUser).push({ 
-        message: message,  // Store original message for local display
+        message: message,
         imageUrl: pmImageUrl, 
         timestamp, 
         encrypted: isPMEncryptionEnabled,
         type: 'sent' 
     });
     
-    // Add to UI
+    // Add to UI - show plain text for now, will display encrypted on server if needed
     if (pmImageUrl) {
         addPMImageToUI(currentPMUser, pmImageUrl, message, timestamp, 'sent');
     } else if (isPMEncryptionEnabled) {
-        // Show encrypted message locally
-        addEncryptedPMToUI(currentPMUser, finalMessage, timestamp, 'sent');
+        // Show as encrypted (we'll let server encrypt it)
+        addEncryptedPMToUI(currentPMUser, message, timestamp, 'sent');
     } else {
         addPMToUI(currentPMUser, message, timestamp, 'sent');
     }
@@ -1110,12 +1125,10 @@ window.decryptPMMessage = async function(bubbleElement) {
         
         if (data.success) {
             // Update the bubble with decrypted content
-            const originalTime = bubbleElement.querySelector('.pm-msg-time');
-            const timeText = originalTime ? originalTime.textContent : '';
             bubbleElement.innerHTML = `
                 <span class="lock-icon">🔓</span>
                 <span class="decrypted-text">${escapeHTML(data.decryptedMessage)}</span>
-                <div class="pm-msg-time">${timeText}</div>
+                <div class="pm-msg-time">${bubbleElement.querySelector('.pm-msg-time').textContent}</div>
             `;
             bubbleElement.classList.add('decrypted');
             bubbleElement.classList.remove('pm-encrypted-bubble');
@@ -1129,6 +1142,7 @@ window.decryptPMMessage = async function(bubbleElement) {
         showToast('❌ Decryption failed - please try again', 3000);
     }
 };
+
 window.decryptMessage = async function(bubbleElement) {
     const encryptedText = bubbleElement.getAttribute('data-encrypted-text');
     

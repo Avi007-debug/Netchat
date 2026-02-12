@@ -673,7 +673,18 @@ io.on('connection', (socket) => {
 
   // ===== Private Message =====
   socket.on('pm:send', (data) => {
-    const { to, message, encrypted, imageUrl } = data;
+    const { to, message, encrypted, encryptionPassword, imageUrl } = data;
+
+    // Handle encryption if requested
+    let finalMessage = (message || '').trim();
+    if (encrypted && finalMessage && encryptionPassword) {
+      try {
+        finalMessage = encryptMessage(finalMessage, encryptionPassword);
+      } catch (error) {
+        socket.emit('error', { message: 'Encryption failed' });
+        return;
+      }
+    }
 
     // Find target user
     let targetUserId = null;
@@ -688,11 +699,7 @@ io.on('connection', (socket) => {
     }
     
     if (targetSocketId) {
-      // For PM, message is already encrypted on client-side if needed
-      // Just forward to recipient
-      const finalMessage = message || '';
-      
-      // Send PM to target user
+      // Send PM to target user with encrypted message
       io.to(targetSocketId).emit('pm:received', {
         from: socket.username,
         message: finalMessage,
