@@ -41,7 +41,8 @@ let currentPMUser = null;
 let pmMessagesMap = new Map(); // Store PM history
 // Persisted unread counts: { username: number }
 let unreadCounts = {};
-let isEncryptionEnabled = false; // Encryption toggle state for rooms
+let isEncryptionEnabled = false; // Encryption toggle state
+let encryptionPassword = null; // Password for encryption for rooms
 let isPMEncryptionEnabled = false; // Encryption toggle state for private messages
 
 // Initialize
@@ -219,14 +220,25 @@ function addMessageToUI(message) {
                 </div>
             `;
         } else {
-            const encryptedIndicator = message.encrypted ? '🔐 ' : '';
-            messageEl.innerHTML = `
-                <div class="message-username">${message.username}</div>
-                <div class="message-bubble">
-                    ${encryptedIndicator}${escapeHTML(message.message)}
-                    <div class="message-time">${timestamp}</div>
-                </div>
-            `;
+            if (message.encrypted) {
+                // Encrypted message - clickable to decrypt
+                messageEl.innerHTML = `
+                    <div class="message-username">${message.username}</div>
+                    <div class="message-bubble encrypted-message" data-encrypted-text="${escapeHTML(message.message)}" onclick="decryptMessage(this)">
+                        <span class="lock-icon">🔐</span>
+                        <span class="encrypted-text">Encrypted message - Click to decrypt</span>
+                        <div class="message-time">${timestamp}</div>
+                    </div>
+                `;
+            } else {
+                messageEl.innerHTML = `
+                    <div class="message-username">${message.username}</div>
+                    <div class="message-bubble">
+                        ${escapeHTML(message.message)}
+                        <div class="message-time">${timestamp}</div>
+                    </div>
+                `;
+            }
         }
     }
 
@@ -472,7 +484,8 @@ function sendMessage() {
     socket.emit('message:send', {
         message: message,
         room: currentRoom,
-        encrypted: isEncryptionEnabled
+        encrypted: isEncryptionEnabled,
+        encryptionPassword: encryptionPassword
     });
 
     messageInput.value = '';
@@ -816,14 +829,30 @@ pmModal.addEventListener('click', (e) => {
 
 // Encryption toggle button
 encryptBtn.addEventListener('click', () => {
-    isEncryptionEnabled = !isEncryptionEnabled;
-    
-    if (isEncryptionEnabled) {
+    if (!isEncryptionEnabled) {
+        // Enabling encryption - ask for password
+        const password = prompt('🔐 Enter encryption password:\n\nThis password will be used to encrypt your messages.\nShare this password with people who should be able to read your encrypted messages.');
+        
+        if (!password) {
+            showToast('❌ Encryption cancelled - no password provided', 3000);
+            return;
+        }
+        
+        if (password.length < 4) {
+            showToast('❌ Password too short - minimum 4 characters', 3000);
+            return;
+        }
+        
+        encryptionPassword = password;
+        isEncryptionEnabled = true;
         encryptBtn.textContent = '🔐';
         encryptBtn.title = 'Encryption ON - Messages are encrypted with AES-256. Click to disable.';
         encryptBtn.classList.add('active');
-        showToast('🔐 Encryption ENABLED\n\nYour messages will be encrypted with AES-256-CBC.\nOther users will see encrypted text unless they decrypt it.', 5000);
+        showToast('🔐 Encryption ENABLED\n\nYour messages will be encrypted with your password.\nOthers need the same password to decrypt.', 5000);
     } else {
+        // Disabling encryption
+        isEncryptionEnabled = false;
+        encryptionPassword = null;
         encryptBtn.textContent = '🔓';
         encryptBtn.title = 'Encryption OFF - Messages sent as plain text. Click to enable encryption.';
         encryptBtn.classList.remove('active');
@@ -831,22 +860,79 @@ encryptBtn.addEventListener('click', () => {
     }
 });
 
+// Decrypt message function
+window.decryptMessage = async function(bubbleElement) {
+    const encryptedText = bubbleElement.getAttribute('data-encrypted-text');
+    
+    if (!encryptedText) {
+        showToast('❌ No encrypted message found', 2000);
+        return;
+    }
+    
+    // Check if already decrypted
+    if (bubbleElement.classList.contains('decrypted')) {
+        return;
+    }
+    
+    const password = prompt('🔓 Enter decryption password:\n\nEnter the password used to encrypt this message.');
+    
+    if (!password) {
+        showToast('❌ Decryption cancelled', 2000);
+        return;
+    }
+    
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/decrypt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                encryptedMessage: encryptedText,
+                password: password
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update the bubble with decrypted content
+            bubbleElement.innerHTML = `
+                <span class="lock-icon">🔓</span>
+                <span class="decrypted-text">${escapeHTML(data.decryptedMessage)}</span>
+                <div class="message-time">${bubbleElement.querySelector('.message-time').textContent}</div>
+            `;
+            bubbleElement.classList.add('decrypted');
+            bubbleElement.classList.remove('encrypted-message');
+            bubbleElement.onclick = null; // Remove click handler
+            showToast('✅ Message decrypted successfully', 2000);
+        } else {
+            showToast('❌ ' + (data.message || 'Decryption failed - wrong password?'), 3000);
+        }
+    } catch (error) {
+        console.error('Decryption error:', error);
+        showToast('❌ Decryption failed - please try again', 3000);
+    }
+};
+
 // Add double-click for encryption help
 encryptBtn.addEventListener('dblclick', (e) => {
     e.preventDefault();
-    const helpText = `🔐 ENCRYPTION FEATURE\n\n` +
+    const helpText = `🔐 PASSWORD-BASED ENCRYPTION\n\n` +
         `HOW IT WORKS:\n` +
-        `1. Click the lock button to toggle encryption\n` +
-        `2. When 🔐 is shown, encryption is ON\n` +
-        `3. When 🔓 is shown, encryption is OFF\n\n` +
+        `1. Click 🔓 and enter a password\n` +
+        `2. Your messages will be encrypted with that password\n` +
+        `3. Share the password with who should read them\n` +
+        `4. Recipients click encrypted messages to decrypt\n\n` +
         `ENCRYPTION DETAILS:\n` +
         `• Algorithm: AES-256-CBC\n` +
-        `• Your messages are encrypted on the server\n` +
-        `• Encrypted messages show a 🔐 icon\n` +
-        `• Only you control encryption for YOUR messages\n\n` +
+        `• Key Derivation: Scrypt\n` +
+        `• Password-based symmetric encryption\n` +
+        `• Only users with the password can decrypt\n\n` +
         `USE CASE:\n` +
-        `Send sensitive information securely. Other users will see encrypted text unless they have the decryption key.\n\n` +
-        `NOTE: This is a demonstration feature. For true end-to-end encryption, both sender and receiver need shared keys.`;
+        `Send sensitive info in group chats.\nEveryone with the password can read it.\nOthers see only encrypted text.`;
     
     alert(helpText);
 });

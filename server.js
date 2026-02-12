@@ -23,31 +23,45 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // ===== ENCRYPTION CONFIGURATION =====
-const ENCRYPTION_KEY = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'netchat-encryption-key-2026', 'salt', 32);
 const IV_LENGTH = 16;
 
-// Encrypt message
-function encryptMessage(text) {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-  let encrypted = cipher.update(text, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return iv.toString('hex') + ':' + encrypted;
+// Encrypt message with password
+function encryptMessage(text, password) {
+  try {
+    // Derive key from password using scrypt
+    const key = crypto.scryptSync(password, 'netchat-salt-v1', 32);
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return iv.toString('hex') + ':' + encrypted;
+  } catch (error) {
+    console.error('Encryption error:', error);
+    throw new Error('Encryption failed');
+  }
 }
 
-// Decrypt message
-function decryptMessage(text) {
+// Decrypt message with password
+function decryptMessage(text, password) {
   try {
     const parts = text.split(':');
-    const iv = Buffer.from(parts.shift(), 'hex');
-    const encryptedText = Buffer.from(parts.join(':'), 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+    if (parts.length !== 2) {
+      throw new Error('Invalid encrypted message format');
+    }
+    
+    const iv = Buffer.from(parts[0], 'hex');
+    const encryptedText = Buffer.from(parts[1], 'hex');
+    
+    // Derive same key from password
+    const key = crypto.scryptSync(password, 'netchat-salt-v1', 32);
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    
     let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (error) {
     console.error('Decryption error:', error);
-    return text; // Return original if decryption fails
+    throw new Error('Decryption failed - wrong password or corrupted message');
   }
 }
 
@@ -376,13 +390,17 @@ app.post('/api/upload/image', verifyToken, upload.single('image'), (req, res) =>
 // ===== DECRYPT MESSAGE ROUTE =====
 app.post('/api/decrypt', verifyToken, (req, res) => {
   try {
-    const { encryptedMessage } = req.body;
+    const { encryptedMessage, password } = req.body;
     
     if (!encryptedMessage) {
       return res.status(400).json({ success: false, message: 'No message to decrypt' });
     }
+    
+    if (!password) {
+      return res.status(400).json({ success: false, message: 'Password required for decryption' });
+    }
 
-    const decrypted = decryptMessage(encryptedMessage);
+    const decrypted = decryptMessage(encryptedMessage, password);
     
     res.json({
       success: true,
@@ -391,9 +409,9 @@ app.post('/api/decrypt', verifyToken, (req, res) => {
     });
   } catch (error) {
     console.error('Decryption error:', error);
-    res.status(500).json({
+    res.status(400).json({
       success: false,
-      message: 'Error decrypting message'
+      message: 'Wrong password or corrupted message'
     });
   }
 });
@@ -529,7 +547,7 @@ io.on('connection', (socket) => {
 
   // ===== Send Message =====
   socket.on('message:send', (data) => {
-    const { message, room, encrypted, imageUrl } = data;
+    const { message, room, encrypted, encryptionPassword, imageUrl } = data;
     const user = connectedUsers.get(socket.userId);
 
     if (!user || !user.room) {
@@ -539,8 +557,13 @@ io.on('connection', (socket) => {
 
     // Handle encryption if requested
     let finalMessage = message.trim();
-    if (encrypted && finalMessage) {
-      finalMessage = encryptMessage(finalMessage);
+    if (encrypted && finalMessage && encryptionPassword) {
+      try {
+        finalMessage = encryptMessage(finalMessage, encryptionPassword);
+      } catch (error) {
+        socket.emit('error', { message: 'Encryption failed' });
+        return;
+      }
     }
 
     const messageObj = {

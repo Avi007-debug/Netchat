@@ -382,6 +382,66 @@ body {
     margin-top: 5px;
 }
 
+/* Encrypted Messages */
+.encrypted-message {
+    background: linear-gradient(135deg, #434343 0%, #000000 100%) !important;
+    color: #fff !important;
+    cursor: pointer !important;
+    position: relative;
+    transition: all 0.3s ease;
+    border: 2px solid #666 !important;
+}
+
+.encrypted-message:hover {
+    background: linear-gradient(135deg, #555 0%, #222 100%) !important;
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.encrypted-message::before {
+    content: '🔒 Click to decrypt with password';
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.encrypted-message:hover::before {
+    opacity: 1;
+}
+
+.lock-icon {
+    font-size: 18px;
+    margin-right: 8px;
+}
+
+.encrypted-text {
+    font-family: 'Courier New', monospace;
+    opacity: 0.9;
+    word-break: break-all;
+}
+
+.decrypted-text {
+    color: #fff;
+    background: rgba(76, 175, 80, 0.2);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.decrypted {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%) !important;
+    border: 2px solid #388e3c !important;
+}
+
 /* Typing Indicator */
 .typing-indicator {
     height: 20px;
