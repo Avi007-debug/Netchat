@@ -56,6 +56,13 @@
                         <div class="pm-info">Private messages are only visible to you and <span id="pmUsernameInfo"></span></div>
                     </div>
                     <div class="pm-input-area">
+                        <input 
+                            type="file" 
+                            id="pmImageInput" 
+                            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                            style="display: none;"
+                        >
+                        <button id="pmImageBtn" class="image-btn" title="Send Image" style="margin-right: 5px;">📷</button>
                         <button id="pmEncryptBtn" class="encrypt-btn" title="Toggle Encryption (OFF)" style="margin-right: 5px;">🔓</button>
                         <input type="text" id="pmInput" placeholder="Type private message..." class="pm-input">
                         <button id="pmSendBtn" class="pm-send-btn">Send</button>

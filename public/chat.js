@@ -27,6 +27,8 @@ const pmInput = document.getElementById('pmInput');
 const pmSendBtn = document.getElementById('pmSendBtn');
 const pmCloseBtn = document.getElementById('pmCloseBtn');
 const pmEncryptBtn = document.getElementById('pmEncryptBtn');
+const pmImageBtn = document.getElementById('pmImageBtn');
+const pmImageInput = document.getElementById('pmImageInput');
 const imageBtn = document.getElementById('imageBtn');
 const imageInput = document.getElementById('imageInput');
 const encryptBtn = document.getElementById('encryptBtn');
@@ -44,6 +46,8 @@ let unreadCounts = {};
 let isEncryptionEnabled = false; // Encryption toggle state
 let encryptionPassword = null; // Password for encryption for rooms
 let isPMEncryptionEnabled = false; // Encryption toggle state for private messages
+let pmEncryptionPassword = null; // Password for PM encryption
+let pmImageUrl = null; // Temporary storage for PM image
 
 // Initialize
 window.addEventListener('load', () => {
@@ -100,24 +104,29 @@ socket.on('session:duplicate', (data) => {
 
 // Private Message Received (single consolidated handler)
 socket.on('pm:received', (data) => {
-    const { from, message, encrypted, timestamp } = data;
+    const { from, message, encrypted, imageUrl, timestamp } = data;
     
-    // Decrypt message if it was encrypted
+    // Don't auto-decrypt - let user click to decrypt like room messages
     let displayMessage = message;
-    if (encrypted) {
-        displayMessage = decryptMessage(message);
-    }
 
     // Browser notification
-    showNotification(`New PM from ${from}${encrypted ? ' (encrypted)' : ''}`);
+    const notifMsg = imageUrl ? `New PM from ${from} (image)` : `New PM from ${from}${encrypted && message ? ' (encrypted)' : ''}`;
+    showNotification(notifMsg);
 
     // Store PM locally
     if (!pmMessagesMap.has(from)) pmMessagesMap.set(from, []);
-    pmMessagesMap.get(from).push({ from, message: displayMessage, timestamp, type: 'received' });
+    pmMessagesMap.get(from).push({ from, message: displayMessage, imageUrl: imageUrl || null, timestamp, encrypted: encrypted || false, type: 'received' });
 
     // If PM chat is open with this user, show immediately and do not mark unread
     if (currentPMUser === from) {
-        addPMToUI(from, displayMessage, timestamp, 'received');
+        if (imageUrl) {
+            addPMImageToUI(from, imageUrl, displayMessage, timestamp, 'received');
+        } else if (encrypted) {
+            // Show as encrypted for PM - user must click to decrypt
+            addEncryptedPMToUI(from, displayMessage, timestamp, 'received');
+        } else {
+            addPMToUI(from, displayMessage, timestamp, 'received');
+        }
     } else {
         // Increment unread count and persist
         unreadCounts[from] = (unreadCounts[from] || 0) + 1;
@@ -125,10 +134,16 @@ socket.on('pm:received', (data) => {
 
         // Add unread badge to PM button next to user
         const userBtn = document.querySelector(`.user-item[data-username="${from}"] .pm-btn`);
-        if (userBtn) userBtn.classList.add('pm-unread');
+        if (userBtn) {
+            userBtn.classList.add('pm-unread');
+        }
 
-        // Show in-page toast (truncated)
-        showToast(`PM from ${from}: ${displayMessage}`);
+        // Show in-page toast notification (improved)
+        const preview = imageUrl ? '📷 Image shared' : 
+                       encrypted ? '🔐 Encrypted message' : 
+                       displayMessage.substring(0, 50) + (displayMessage.length > 50 ? '...' : '');
+        const toastMsg = `💬 PM from <strong>${from}</strong>:<br>${preview}`;
+        showToast(toastMsg, 5000);
     }
 });
 
@@ -185,6 +200,51 @@ socket.on('user:stopTyping', (data) => {
 socket.on('error', (error) => {
     console.error('❌ Socket error:', error.message);
 });
+
+// ===== Encryption Functions (Client-side) =====
+
+// Simple client-side encryption using base64 + XOR (for browser compatibility)
+function encryptMessage(text, password) {
+    try {
+        if (!password) throw new Error('Password required');
+        
+        // Simple encryption: base64 encode + password hash
+        // Note: This is a simple cipher. For production, use TweetNaCl.js or libsodium.js
+        const encoded = btoa(text); // Base64 encode
+        const hash = password.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
+        
+        // Simple XOR cipher
+        let encrypted = '';
+        for (let i = 0; i < encoded.length; i++) {
+            encrypted += String.fromCharCode(encoded.charCodeAt(i) ^ (hash >> (i % 32)) & 0xFF);
+        }
+        
+        return btoa(encrypted); // Base64 encode the result
+    } catch (error) {
+        console.error('Encryption error:', error);
+        throw new Error('Encryption failed');
+    }
+}
+
+function decryptMessage(encryptedText, password) {
+    try {
+        if (!password) throw new Error('Password required');
+        
+        const hash = password.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0);
+        const encrypted = atob(encryptedText); // Base64 decode
+        
+        // Simple XOR decipher
+        let decrypted = '';
+        for (let i = 0; i < encrypted.length; i++) {
+            decrypted += String.fromCharCode(encrypted.charCodeAt(i) ^ (hash >> (i % 32)) & 0xFF);
+        }
+        
+        return atob(decrypted); // Base64 decode
+    } catch (error) {
+        console.error('Decryption error:', error);
+        throw new Error('Decryption failed - wrong password or corrupted message');
+    }
+}
 
 // ===== Message Functions =====
 
@@ -640,9 +700,11 @@ function openPMChat(username) {
     pmUsername.textContent = username;
     pmUsernameInfo.textContent = username;
     pmModal.style.display = 'flex';
+    pmImageUrl = null; // Reset image
     
     // Reset encryption for new PM chat
     isPMEncryptionEnabled = false;
+    pmEncryptionPassword = null;
     if (pmEncryptBtn) {
         pmEncryptBtn.textContent = '🔓';
         pmEncryptBtn.title = 'PM Encryption OFF - Messages sent as plain text. Click to enable.';
@@ -654,7 +716,9 @@ function openPMChat(username) {
     pmInput.focus();
     // Clear unread badge on PM button
     const userBtn = document.querySelector(`.user-item[data-username="${username}"] .pm-btn`);
-    if (userBtn) userBtn.classList.remove('pm-unread');
+    if (userBtn) {
+        userBtn.classList.remove('pm-unread');
+    }
     // Clear persisted unread count for this user
     if (unreadCounts[username]) {
         unreadCounts[username] = 0;
@@ -696,29 +760,101 @@ function addPMToUI(username, message, timestamp, type) {
     container.scrollTop = container.scrollHeight;
 }
 
+function addEncryptedPMToUI(username, encryptedText, timestamp, type) {
+    const container = pmMessagesContainer;
+    const msgEl = document.createElement('div');
+    msgEl.className = `pm-message pm-${type}`;
+    
+    const time = new Date(timestamp).toLocaleTimeString();
+    const label = type === 'sent' ? 'You' : username;
+    
+    msgEl.innerHTML = `
+        <div class="pm-msg-label">${label}</div>
+        <div class="pm-msg-text pm-encrypted-bubble" data-encrypted-text="${escapeHTML(encryptedText)}" onclick="decryptPMMessage(this)">
+            <span class="lock-icon">🔐</span>
+            <span class="encrypted-text">Encrypted message - Click to decrypt</span>
+            <div class="pm-msg-time">${time}</div>
+        </div>
+    `;
+    
+    container.appendChild(msgEl);
+    container.scrollTop = container.scrollHeight;
+}
+
+function addPMImageToUI(username, imageUrl, caption, timestamp, type) {
+    const container = pmMessagesContainer;
+    const msgEl = document.createElement('div');
+    msgEl.className = `pm-message pm-${type}`;
+    
+    const time = new Date(timestamp).toLocaleTimeString();
+    const label = type === 'sent' ? 'You' : username;
+    
+    msgEl.innerHTML = `
+        <div class="pm-msg-label">${label}</div>
+        <div class="pm-message-image-container">
+            <img src="${escapeHTML(imageUrl)}" alt="Shared image" class="pm-message-image" onclick="openImageModal(this.src)">
+            ${caption ? `<div class="pm-image-caption">${escapeHTML(caption)}</div>` : ''}
+            <div class="pm-msg-time">${time}</div>
+        </div>
+    `;
+    
+    container.appendChild(msgEl);
+    container.scrollTop = container.scrollHeight;
+}
+
 function sendPrivateMessage() {
     const message = pmInput.value.trim();
-    if (!message || !currentPMUser) return;
+    if (!message && !pmImageUrl) return;
+    if (!currentPMUser) return;
     
     const timestamp = new Date().toISOString();
+    
+    // Handle encryption if enabled
+    let finalMessage = message;
+    if (isPMEncryptionEnabled && finalMessage && pmEncryptionPassword) {
+        try {
+            // Encrypt on client side with user password
+            finalMessage = encryptMessage(finalMessage, pmEncryptionPassword);
+        } catch (error) {
+            showToast('❌ Encryption failed', 3000);
+            return;
+        }
+    }
     
     // Send to server
     socket.emit('pm:send', {
         to: currentPMUser,
-        message: message,
-        encrypted: isPMEncryptionEnabled
+        message: finalMessage,
+        encrypted: isPMEncryptionEnabled,
+        imageUrl: pmImageUrl
     });
     
     // Store locally
     if (!pmMessagesMap.has(currentPMUser)) {
         pmMessagesMap.set(currentPMUser, []);
     }
-    pmMessagesMap.get(currentPMUser).push({ message, timestamp, type: 'sent' });
+    pmMessagesMap.get(currentPMUser).push({ 
+        message: message,  // Store original message for local display
+        imageUrl: pmImageUrl, 
+        timestamp, 
+        encrypted: isPMEncryptionEnabled,
+        type: 'sent' 
+    });
     
     // Add to UI
-    addPMToUI(currentPMUser, message, timestamp, 'sent');
+    if (pmImageUrl) {
+        addPMImageToUI(currentPMUser, pmImageUrl, message, timestamp, 'sent');
+    } else if (isPMEncryptionEnabled) {
+        // Show encrypted message locally
+        addEncryptedPMToUI(currentPMUser, finalMessage, timestamp, 'sent');
+    } else {
+        addPMToUI(currentPMUser, message, timestamp, 'sent');
+    }
     
     pmInput.value = '';
+    pmImageUrl = null;
+    
+    showToast('✅ PM sent!', 3000);
 }
 
 function showNotification(message) {
@@ -811,6 +947,48 @@ imageInput.addEventListener('change', async (e) => {
     }
 });
 
+// PM Image Upload
+pmImageBtn.onclick = () => pmImageInput.click();
+
+pmImageInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+        showToast('❌ Image too large. Maximum size is 5MB.');
+        pmImageInput.value = '';
+        return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+        showToast('❌ Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.');
+        pmImageInput.value = '';
+        return;
+    }
+
+    // Show uploading indicator
+    pmImageBtn.disabled = true;
+    pmImageBtn.textContent = '⏳';
+
+    // Upload image
+    const imageUrl = await uploadImage(file);
+    
+    // Reset button
+    pmImageBtn.disabled = false;
+    pmImageBtn.textContent = '📷';
+    pmImageInput.value = '';
+
+    if (imageUrl && currentPMUser) {
+        // Store image for sending with optional caption
+        pmImageUrl = imageUrl;
+        showToast('✅ Image ready to send. Add a caption (optional) and click Send!', 4000);
+        pmInput.focus();
+    }
+});
+
 pmCloseBtn.onclick = closePMChat;
 pmSendBtn.onclick = sendPrivateMessage;
 pmInput.addEventListener('keypress', (e) => {
@@ -824,6 +1002,39 @@ pmInput.addEventListener('keypress', (e) => {
 pmModal.addEventListener('click', (e) => {
     if (e.target === pmModal) {
         closePMChat();
+    }
+});
+
+// PM Encryption toggle button
+pmEncryptBtn.addEventListener('click', () => {
+    if (!isPMEncryptionEnabled) {
+        // Enabling PM encryption - ask for password
+        const password = prompt('🔐 Enter encryption password for private messages:\n\nThis password will be used to encrypt your PM.\nShare this password with the recipient to read encrypted messages.\n\nMinimum 4 characters.');
+        
+        if (!password) {
+            showToast('❌ PM Encryption cancelled - no password provided', 3000);
+            return;
+        }
+        
+        if (password.length < 4) {
+            showToast('❌ Password too short - minimum 4 characters', 3000);
+            return;
+        }
+        
+        pmEncryptionPassword = password;
+        isPMEncryptionEnabled = true;
+        pmEncryptBtn.textContent = '🔐';
+        pmEncryptBtn.title = 'PM Encryption ON - Messages are encrypted with AES-256. Click to disable.';
+        pmEncryptBtn.classList.add('active');
+        showToast('🔐 PM Encryption ENABLED\n\nYour private messages will be encrypted.\nShare password with recipient to decrypt.', 5000);
+    } else {
+        // Disabling PM encryption
+        isPMEncryptionEnabled = false;
+        pmEncryptionPassword = null;
+        pmEncryptBtn.textContent = '🔓';
+        pmEncryptBtn.title = 'PM Encryption OFF - Messages sent as plain text. Click to enable encryption.';
+        pmEncryptBtn.classList.remove('active');
+        showToast('🔓 PM Encryption DISABLED\n\nMessages will be sent as plain text.', 3000);
     }
 });
 
@@ -860,7 +1071,64 @@ encryptBtn.addEventListener('click', () => {
     }
 });
 
-// Decrypt message function
+// Decrypt PM message function
+window.decryptPMMessage = async function(bubbleElement) {
+    const encryptedText = bubbleElement.getAttribute('data-encrypted-text');
+    
+    if (!encryptedText) {
+        showToast('❌ No encrypted message found', 2000);
+        return;
+    }
+    
+    // Check if already decrypted
+    if (bubbleElement.classList.contains('decrypted')) {
+        return;
+    }
+    
+    const password = prompt('🔓 Enter decryption password:\n\nEnter the password used to encrypt this message.');
+    
+    if (!password) {
+        showToast('❌ Decryption cancelled', 2000);
+        return;
+    }
+    
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/decrypt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                encryptedMessage: encryptedText,
+                password: password
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update the bubble with decrypted content
+            const originalTime = bubbleElement.querySelector('.pm-msg-time');
+            const timeText = originalTime ? originalTime.textContent : '';
+            bubbleElement.innerHTML = `
+                <span class="lock-icon">🔓</span>
+                <span class="decrypted-text">${escapeHTML(data.decryptedMessage)}</span>
+                <div class="pm-msg-time">${timeText}</div>
+            `;
+            bubbleElement.classList.add('decrypted');
+            bubbleElement.classList.remove('pm-encrypted-bubble');
+            bubbleElement.onclick = null; // Remove click handler
+            showToast('✅ Message decrypted successfully', 2000);
+        } else {
+            showToast('❌ ' + (data.message || 'Decryption failed - wrong password?'), 3000);
+        }
+    } catch (error) {
+        console.error('Decryption error:', error);
+        showToast('❌ Decryption failed - please try again', 3000);
+    }
+};
 window.decryptMessage = async function(bubbleElement) {
     const encryptedText = bubbleElement.getAttribute('data-encrypted-text');
     

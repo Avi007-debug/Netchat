@@ -21,13 +21,17 @@ const io = socketIO(server, {
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your_encryption_key_min_32_chars_long';
 
 // ===== ENCRYPTION CONFIGURATION =====
 const IV_LENGTH = 16;
 
 // Encrypt message with password
-function encryptMessage(text, password) {
+function encryptMessage(text, password = ENCRYPTION_KEY) {
   try {
+    if (!password) {
+      throw new Error('Encryption key not set');
+    }
     // Derive key from password using scrypt
     const key = crypto.scryptSync(password, 'netchat-salt-v1', 32);
     const iv = crypto.randomBytes(IV_LENGTH);
@@ -42,8 +46,11 @@ function encryptMessage(text, password) {
 }
 
 // Decrypt message with password
-function decryptMessage(text, password) {
+function decryptMessage(text, password = ENCRYPTION_KEY) {
   try {
+    if (!password) {
+      throw new Error('Decryption key not set');
+    }
     const parts = text.split(':');
     if (parts.length !== 2) {
       throw new Error('Invalid encrypted message format');
@@ -666,7 +673,7 @@ io.on('connection', (socket) => {
 
   // ===== Private Message =====
   socket.on('pm:send', (data) => {
-    const { to, message, encrypted } = data;
+    const { to, message, encrypted, imageUrl } = data;
 
     // Find target user
     let targetUserId = null;
@@ -681,21 +688,26 @@ io.on('connection', (socket) => {
     }
     
     if (targetSocketId) {
-      // Encrypt message if requested
-      let finalMessage = message;
-      if (encrypted) {
-        finalMessage = encryptMessage(message);
-      }
+      // For PM, message is already encrypted on client-side if needed
+      // Just forward to recipient
+      const finalMessage = message || '';
       
       // Send PM to target user
       io.to(targetSocketId).emit('pm:received', {
         from: socket.username,
         message: finalMessage,
         encrypted: encrypted || false,
+        imageUrl: imageUrl || null,
         timestamp: new Date().toISOString()
       });
       
-      console.log(`💌 PM: ${socket.username} -> ${to}: ${encrypted ? '(encrypted)' : message}`);
+      if (encrypted && finalMessage) {
+        console.log(`💌 PM: ${socket.username} -> ${to}: (encrypted)`);
+      } else if (imageUrl) {
+        console.log(`📷 PM: ${socket.username} -> ${to}: (image)`);
+      } else {
+        console.log(`💌 PM: ${socket.username} -> ${to}: ${message}`);
+      }
     } else {
       // User not found
       socket.emit('error', { message: `User '${to}' not found or offline` });
