@@ -29,12 +29,16 @@ A dual-mode chat application demonstrating operating system concepts with both C
 *All features from Standard Server, PLUS:*
 - ✅ **IPC - Shared Memory**: Cross-process message buffer (shmget/shmat)
 - ✅ **IPC - Message Queues**: Offline message delivery (POSIX mqueue)
+- ✅ **Signal-based IPC**: SIGUSR1 for broadcast notifications, SIGCHLD for cleanup
 - ✅ **Process Forking**: Separate process per client connection
 - ✅ **Semaphores**: Named semaphores for resource control
-- ✅ **Advanced Synchronization**: Complex process coordination
+- ✅ **Producer-Consumer Pattern**: Children queue messages, parent broadcasts
+- ✅ **Advanced Synchronization**: pselect() with signal masking for atomic operations
+- ✅ **Graceful Shutdown**: Ctrl+C triggers proper cleanup of all IPC resources
+- ✅ **Full Multi-client Broadcasting**: Real-time message delivery between all clients
 - ⚠️ **Port**: 5555
 - ⚠️ **Process Model**: One process per client (forking architecture)
-- ⚠️ **Best For**: OS learning, advanced IPC demonstrations
+- ⚠️ **Best For**: OS learning, advanced IPC demonstrations, signal handling
 
 ### Web Server (Modern Interface)
 - ✅ **WebSocket**: Real-time bidirectional communication (Socket.IO)

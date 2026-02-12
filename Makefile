@@ -44,6 +44,8 @@ run-server: server
 run-enhanced: enhanced
 	@echo "🚀 Starting enhanced C server on port 5555..."
 	@echo "   OS Features Active: Shared Memory | Message Queues | Process Forking | Semaphores"
+	@echo "🔧 Creating IPC key file..."
+	@touch /tmp/netchat_key
 	@cd server && ./server_enhanced
 
 run-client: client

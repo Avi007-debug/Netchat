@@ -15,6 +15,7 @@ Complete guide for installing, running, and testing NetChat.
 | **IPC Methods** | WebSocket | File-based | Shared Memory + Message Queues |
 | **UI** | Browser (modern) | Terminal / telnet | Terminal / telnet |
 | **Best For** | Demos, production use | Learning pthreads | Learning fork(), IPC, semaphores |
+| **Multi-client Chat** | ✅ Full support | ✅ Full support | ✅ Full support (signal-based IPC) |
 | **Prerequisites** | Node.js, npm | GCC, POSIX libs | GCC, librt |
 | **Concepts Learned** | WebSocket, JWT, crypto | Threading, mutex | Process management, IPC |
 | **Start Command** | `npm start` | `make run-server` | `make run-enhanced` |
@@ -216,6 +217,7 @@ chmod 755 public/uploads
 ### Option 1: Web Server Only (Recommended for Most Users)
 
 **Development Mode** (with auto-restart):
+lsof -i :3000 | grep -v COMMAND | awk '{print $2}' | xargs kill -9 2>/dev/null; echo "Port 3000 cleared"
 ```bash
 npm run dev
 ```
@@ -257,7 +259,7 @@ nc localhost 8080
 
 **Connect as Client** (in separate terminal):
 ```bash
-# Option A - Using Makefile (EASIEST)
+# Option A - Using Makefile (EASIEST) - Recommended for full chat functionality
 make run-client CLIENT_PORT=8080
 
 # Option B - Manual compilation then run
@@ -267,6 +269,8 @@ cd client && ./client
 telnet localhost 8080
 nc localhost 8080
 ```
+
+**💡 Tip**: The standard C server (port 8080) is recommended for testing multi-client chat features, as it uses threading which allows proper message broadcasting between clients.
 
 **Important**: Make sure you're in the project **root directory**, not the `server/` directory!
 
@@ -299,6 +303,7 @@ For students learning process management, shared memory, message queues, and sem
 # First time setup - clean old IPC resources
 ipcrm -a 2>/dev/null
 sem_unlink /netchat_sem 2>/dev/null
+touch /tmp/netchat_key  # Create IPC key file
 
 # Start the server
 make run-enhanced
@@ -378,6 +383,45 @@ make run-enhanced
 - Named Semaphores (sem_open/sem_wait/sem_post)
 - Process synchronization across multiple processes
 - Zombie process handling (wait/waitpid)
+- **Signal-based IPC** (SIGUSR1 for broadcast notifications)
+- **Producer-Consumer pattern** (children queue messages, parent broadcasts)
+
+**Architecture**: The enhanced server uses a signal-based IPC architecture:
+1. **Parent process** owns all socket file descriptors
+2. **Child processes** handle client I/O and queue messages to shared memory
+3. **Children signal parent** (SIGUSR1) when messages are queued
+4. **Parent broadcasts** queued messages to all connected clients
+5. **Select with timeout** - Parent uses `select()` with 500ms timeout to periodically process broadcasts even when not accepting new connections
+
+This architecture demonstrates why file descriptors cannot be shared across processes and teaches proper inter-process communication using signals, shared memory queues, and the producer-consumer pattern.
+
+**Graceful Shutdown**: Press `Ctrl+C` to trigger graceful shutdown which will:
+- Broadcast shutdown message to all clients
+- Wait for child processes to terminate
+- Clean up all IPC resources (shared memory, message queues, semaphores)
+- Close all connections
+- Display cleanup status
+
+**Testing Multi-Client Chat**:
+```bash
+# Terminal 1: Start server
+cd /home/avishkar/Coding/Netchat/server
+./server_enhanced
+
+# Terminal 2: Connect first client
+nc localhost 5555
+# Login as alice with password testpass
+# Send message: "Hello from Alice"
+
+# Terminal 3: Connect second client  
+nc localhost 5555
+# Login as bob with password pass123
+# You should see Alice's message appear!
+# Send message: "Hi Alice, Bob here"
+
+# Both clients will see each other's messages in real-time
+# Terminal 1: Press Ctrl+C to see graceful shutdown
+```
 
 ### C Server Commands Reference
 

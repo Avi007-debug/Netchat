@@ -118,6 +118,60 @@ All messages include timestamp and room prefix:
 [HH:MM:SS] [#roomname] username: message
 ```
 
+---
+
+## 🔧 Enhanced C Server - Advanced Architecture
+
+### Signal-based IPC Implementation
+**Problem Solved**: File descriptors cannot be shared across forked processes
+
+**Architecture**:
+1. **Parent Process**:
+   - Owns all client socket file descriptors
+   - Uses `pselect()` with 100ms timeout to monitor connections
+   - Processes broadcast queue when signaled by children
+   - Handles SIGINT (Ctrl+C) for graceful shutdown
+   - Handles SIGCHLD to clean up terminated child processes
+
+2. **Child Processes**:
+   - Handle individual client I/O in isolated process space
+   - Queue broadcast messages to shared memory
+   - Signal parent with `kill(parent_pid, SIGUSR1)` when messages ready
+   - Automatically cleaned up on disconnect
+
+3. **Shared Memory Queue**:
+   - 50-message circular buffer (128KB total)
+   - Thread-safe with pthread mutex
+   - Stores message, sender info, room, and broadcast type
+
+4. **Signal Handling**:
+   - **SIGUSR1**: Broadcast notification (children → parent)
+   - **SIGCHLD**: Child termination cleanup (auto-reap zombies)
+   - **SIGINT**: Graceful shutdown trigger (Ctrl+C)
+   - Signal mask blocks SIGUSR1 except during pselect()
+
+### Graceful Shutdown Process
+1. **User presses Ctrl+C** → SIGINT delivered to parent
+2. **Parent broadcasts** shutdown message to all clients
+3. **Parent sends SIGTERM** to all child processes
+4. **Parent waits** for children to terminate (waitpid loop)
+5. **Cleanup IPC resources**:
+   - Shared memory (shmctl/shmdt)
+   - Message queues (mq_close/mq_unlink)
+   - Named semaphores (sem_close/sem_unlink)
+6. **Close all sockets** and exit cleanly
+
+### Key OS Concepts Demonstrated
+- **Process Forking**: `fork()` creates child per client
+- **IPC - Shared Memory**: `shmget()`, `shmat()`, `shmdt()`, `shmctl()`
+- **IPC - Message Queues**: `mq_open()`, `mq_send()`, `mq_receive()`, `mq_unlink()`
+- **IPC - Signals**: `kill()`, `signal()`, `sigaction()`, `sigprocmask()`
+- **Semaphores**: `sem_open()`, `sem_wait()`, `sem_post()`, `sem_unlink()`
+- **Process Synchronization**: `pselect()` with atomic signal unmasking
+- **Zombie Prevention**: SIGCHLD handler with `waitpid()`
+- **Mutex Locking**: `pthread_mutex_lock()`, `pthread_mutex_unlock()`
+- **Producer-Consumer**: Children produce messages, parent consumes and broadcasts
+
 ### Implementation Details
 - **No Room Broadcast**: PMs never appear in public chat
 - **Client-side Storage**: Web client stores PM history locally

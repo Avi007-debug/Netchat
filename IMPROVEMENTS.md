@@ -37,7 +37,37 @@ This document tracks potential enhancements, advanced OS concepts, and feature i
 
 ---
 
-### 2. Enhanced Makefile ✅ COMPLETED
+### 2. Signal-Based IPC for Enhanced Server ✅ COMPLETED
+**Status**: Fully implemented (February 2026)
+
+**Problem**: Enhanced server with forked processes couldn't broadcast messages between clients because file descriptors are process-local and cannot be shared across fork().
+
+**Solution Implemented**:
+- ✅ **pselect() with signal masking**: Parent uses `pselect()` with 100ms timeout for atomic signal handling
+- ✅ **SIGUSR1 broadcast notifications**: Children signal parent when messages are queued
+- ✅ **Shared memory message queue**: 50-message circular buffer for inter-process communication
+- ✅ **SIGCHLD handler**: Properly reaps terminated children and closes sockets
+- ✅ **Graceful shutdown**: Ctrl+C triggers SIGINT → broadcast shutdown → wait for children → cleanup IPC
+- ✅ **Full multi-client broadcasting**: Real-time message delivery works between all connected clients
+
+**Architecture**:
+- Parent process owns all socket file descriptors
+- Child processes handle client I/O and queue messages to shared memory
+- Signal-based notification wakes parent to process broadcasts
+- Producer-consumer pattern with mutex-protected shared queue
+
+**OS Concepts Demonstrated**:
+- Process forking and parent-child relationships
+- Signal handling (SIGUSR1, SIGCHLD, SIGINT)
+- Shared memory IPC (shmget/shmat/shmctl)
+- Message queues (POSIX mqueue)
+- Semaphores for connection control
+- Atomic operations with pselect() and signal masks
+- Zombie process prevention
+
+---
+
+### 3. Enhanced Makefile ✅ COMPLETED
 **Status**: Fully implemented
 
 **Current State**:

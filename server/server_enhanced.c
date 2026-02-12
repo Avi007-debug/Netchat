@@ -6,9 +6,11 @@
 #include <pthread.h>
 #include <time.h>
 #include <signal.h>
+#include <errno.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/wait.h>
+#include <sys/select.h>
 #include <mqueue.h>
 #include <semaphore.h>
 
@@ -19,17 +21,42 @@
 #define USERS_FILE "users.txt"
 #define MAX_ROOMS 5
 #define ROOM_NAME_LEN 30
-#define SHM_SIZE 32768
+#define SHM_SIZE 131072  // 128KB - increased for broadcast queue
 #define MAX_RECENT_MESSAGES 20
 #define MQ_NAME "/netchat_queue"
 #define MAX_MQ_MESSAGES 10
+#define MAX_BROADCAST_QUEUE 50
+
+/* ========= BROADCAST MESSAGE STRUCTURE ========= */
+typedef struct {
+    char message[BUFFER_SIZE];
+    int sender_fd;
+    char room[ROOM_NAME_LEN];
+    int broadcast_type;  // 0=room, 1=all, 2=none
+} BroadcastMessage;
 
 /* ========= SHARED MEMORY STRUCTURE ========= */
+typedef struct {
+    int fd;
+    char username[50];
+    char password[50];
+    int authenticated;
+    char room[ROOM_NAME_LEN];
+    pid_t process_id;
+} SharedClient;
+
 typedef struct {
     char messages[MAX_RECENT_MESSAGES][BUFFER_SIZE];
     int message_count;
     int write_index;
     pthread_mutex_t shm_lock;
+    SharedClient clients[MAX_CLIENTS];
+    int client_count;
+    BroadcastMessage broadcast_queue[MAX_BROADCAST_QUEUE];
+    int broadcast_read_idx;
+    int broadcast_write_idx;
+    int broadcast_count;
+    pid_t parent_pid;
 } SharedMessageBuffer;
 
 /* ========= MESSAGE QUEUE STRUCTURE ========= */
@@ -40,21 +67,15 @@ typedef struct {
     int priority;  // 0 = normal, 1 = urgent
 } QueuedMessage;
 
-typedef struct {
-    int fd;
-    char username[50];
-    char password[50];
-    int authenticated;
-    char room[ROOM_NAME_LEN];
-    pid_t process_id;  // For process forking
-} Client;
-
-Client clients[MAX_CLIENTS];
-int client_count = 0;
 pthread_mutex_t lock;
 FILE *log_file;
 int server_fd_global;
 volatile sig_atomic_t server_running = 1;
+volatile sig_atomic_t broadcast_pending = 0;
+pid_t parent_pid_global = 0;
+
+/* Forward declarations */
+void handle_broadcast_signal(int sig);
 
 /* Shared memory variables */
 int shm_id;
@@ -137,10 +158,86 @@ void init_shared_memory() {
         
         shm_buffer->message_count = 0;
         shm_buffer->write_index = 0;
+        shm_buffer->broadcast_read_idx = 0;
+        shm_buffer->broadcast_write_idx = 0;
+        shm_buffer->broadcast_count = 0;
+        shm_buffer->client_count = 0;
         printf("[IPC]: New shared memory created (ID: %d)\n", shm_id);
     } else {
         printf("[IPC]: Using existing shared memory (ID: %d)\n", shm_id);
     }
+}
+
+/* Queue a message for broadcasting by parent process */
+void queue_broadcast(const char *message, int sender_fd, const char *room, int broadcast_type) {
+    pthread_mutex_lock(&shm_buffer->shm_lock);
+    
+    if (shm_buffer->broadcast_count < MAX_BROADCAST_QUEUE) {
+        BroadcastMessage *msg = &shm_buffer->broadcast_queue[shm_buffer->broadcast_write_idx];
+        strncpy(msg->message, message, BUFFER_SIZE - 1);
+        msg->message[BUFFER_SIZE - 1] = '\0';
+        msg->sender_fd = sender_fd;
+        strncpy(msg->room, room, ROOM_NAME_LEN - 1);
+        msg->room[ROOM_NAME_LEN - 1] = '\0';
+        msg->broadcast_type = broadcast_type;
+        
+        shm_buffer->broadcast_write_idx = (shm_buffer->broadcast_write_idx + 1) % MAX_BROADCAST_QUEUE;
+        shm_buffer->broadcast_count++;
+        
+        pthread_mutex_unlock(&shm_buffer->shm_lock);
+        
+        /* Signal parent to process broadcasts */
+        if (shm_buffer->parent_pid > 0) {
+            kill(shm_buffer->parent_pid, SIGUSR1);
+        }
+    } else {
+        pthread_mutex_unlock(&shm_buffer->shm_lock);
+        fprintf(stderr, "[WARNING]: Broadcast queue full, message dropped\n");
+    }
+}
+
+/* Signal handler in parent to process broadcast queue */
+void handle_broadcast_signal(int sig) {
+    (void)sig;  // Unused
+    broadcast_pending = 1;  // Set flag for main loop
+}
+
+/* Process all pending broadcasts (called by parent only) */
+void process_broadcasts() {
+    if (!shm_buffer) return;  // Safety check
+    
+    broadcast_pending = 0;  // Clear flag
+    
+    pthread_mutex_lock(&shm_buffer->shm_lock);
+    
+    while (shm_buffer->broadcast_count > 0) {
+        BroadcastMessage *msg = &shm_buffer->broadcast_queue[shm_buffer->broadcast_read_idx];
+        
+        /* Broadcast based on type */
+        for (int i = 0; i < shm_buffer->client_count; i++) {
+            int should_send = 0;
+            
+            if (msg->broadcast_type == 1) {
+                /* Broadcast to all */
+                should_send = 1;
+            } else if (msg->broadcast_type == 0) {
+                /* Broadcast to room (excluding sender) */
+                if (shm_buffer->clients[i].fd != msg->sender_fd &&
+                    strcmp(shm_buffer->clients[i].room, msg->room) == 0) {
+                    should_send = 1;
+                }
+            }
+            
+            if (should_send) {
+                send(shm_buffer->clients[i].fd, msg->message, strlen(msg->message), 0);
+            }
+        }
+        
+        shm_buffer->broadcast_read_idx = (shm_buffer->broadcast_read_idx + 1) % MAX_BROADCAST_QUEUE;
+        shm_buffer->broadcast_count--;
+    }
+    
+    pthread_mutex_unlock(&shm_buffer->shm_lock);
 }
 
 /* Write message to shared memory */
@@ -281,43 +378,61 @@ void log_message(const char *message) {
 }
 
 void broadcast(char *message, int sender_fd) {
-    pthread_mutex_lock(&lock);
-    for (int i = 0; i < client_count; i++) {
-        if (clients[i].fd != sender_fd) {
-            send(clients[i].fd, message, strlen(message), 0);
+    /* Child process: queue for parent to broadcast */
+    if (getpid() != shm_buffer->parent_pid) {
+        queue_broadcast(message, sender_fd, "general", 0);
+    } else {
+        /* Parent process: broadcast directly */
+        pthread_mutex_lock(&shm_buffer->shm_lock);
+        for (int i = 0; i < shm_buffer->client_count; i++) {
+            if (shm_buffer->clients[i].fd != sender_fd) {
+                send(shm_buffer->clients[i].fd, message, strlen(message), 0);
+            }
         }
+        pthread_mutex_unlock(&shm_buffer->shm_lock);
     }
-    pthread_mutex_unlock(&lock);
 }
 
 void broadcast_all(char *message) {
-    pthread_mutex_lock(&lock);
-    for (int i = 0; i < client_count; i++) {
-        send(clients[i].fd, message, strlen(message), 0);
+    /* Child process: queue for parent to broadcast */
+    if (getpid() != shm_buffer->parent_pid) {
+        queue_broadcast(message, -1, "", 1);
+    } else {
+        /* Parent process: broadcast directly */
+        pthread_mutex_lock(&shm_buffer->shm_lock);
+        for (int i = 0; i < shm_buffer->client_count; i++) {
+            send(shm_buffer->clients[i].fd, message, strlen(message), 0);
+        }
+        pthread_mutex_unlock(&shm_buffer->shm_lock);
     }
-    pthread_mutex_unlock(&lock);
 }
 
 void broadcast_room(char *message, int sender_fd, const char *room) {
-    pthread_mutex_lock(&lock);
-    for (int i = 0; i < client_count; i++) {
-        if (clients[i].fd != sender_fd && 
-            strcmp(clients[i].room, room) == 0) {
-            send(clients[i].fd, message, strlen(message), 0);
+    /* Child process: queue for parent to broadcast */
+    if (getpid() != shm_buffer->parent_pid) {
+        queue_broadcast(message, sender_fd, room, 0);
+    } else {
+        /* Parent process: broadcast directly */
+        pthread_mutex_lock(&shm_buffer->shm_lock);
+        for (int i = 0; i < shm_buffer->client_count; i++) {
+            if (shm_buffer->clients[i].fd != sender_fd && 
+                strcmp(shm_buffer->clients[i].room, room) == 0) {
+                send(shm_buffer->clients[i].fd, message, strlen(message), 0);
+            }
         }
+        pthread_mutex_unlock(&shm_buffer->shm_lock);
     }
-    pthread_mutex_unlock(&lock);
 }
 
 int send_private_message(const char *target_username, const char *message, const char *sender) {
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&shm_buffer->shm_lock);
     int found = 0;
     
-    for (int i = 0; i < client_count; i++) {
-        if (strcmp(clients[i].username, target_username) == 0) {
+    for (int i = 0; i < shm_buffer->client_count; i++) {
+        if (strcmp(shm_buffer->clients[i].username, target_username) == 0) {
             char pm[BUFFER_SIZE + 100];
             snprintf(pm, sizeof(pm), "[PM from %s]: %s", sender, message);
-            send(clients[i].fd, pm, strlen(pm), 0);
+            send(shm_buffer->clients[i].fd, pm, strlen(pm), 0);
             found = 1;
             break;
         }
@@ -330,7 +445,7 @@ int send_private_message(const char *target_username, const char *message, const
         queue_offline_message(target_username, offline_msg, 1);  // Priority = 1 for PMs
     }
     
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&shm_buffer->shm_lock);
     return found;
 }
 
@@ -411,24 +526,48 @@ void handle_shutdown(int sig) {
     (void)sig;
     server_running = 0;
     
+    printf("\n\n╔════════════════════════════════════════════════════════════════╗\n");
+    printf("║              GRACEFUL SHUTDOWN IN PROGRESS...                ║\n");
+    printf("╚════════════════════════════════════════════════════════════════╝\n\n");
+    
     char *msg = "\n[Server]: Server is shutting down. Goodbye!\n";
     broadcast_all(msg);
     log_message(msg);
     
-    pthread_mutex_lock(&lock);
-    for (int i = 0; i < client_count; i++) {
-        close(clients[i].fd);
-        if (clients[i].process_id > 0) {
-            kill(clients[i].process_id, SIGTERM);
+    printf("[Shutdown]: Broadcasting shutdown message to all clients...\n");
+    
+    pthread_mutex_lock(&shm_buffer->shm_lock);
+    int child_count = 0;
+    for (int i = 0; i < shm_buffer->client_count; i++) {
+        close(shm_buffer->clients[i].fd);
+        if (shm_buffer->clients[i].process_id > 0) {
+            kill(shm_buffer->clients[i].process_id, SIGTERM);
+            child_count++;
         }
     }
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&shm_buffer->shm_lock);
+    
+    printf("[Shutdown]: Waiting for %d child processes to exit...\n", child_count);
+    
+    /* Wait for all child processes */
+    while (child_count > 0) {
+        int status;
+        pid_t pid = waitpid(-1, &status, WNOHANG);
+        if (pid > 0) {
+            child_count--;
+        } else {
+            usleep(100000);  // 100ms
+        }
+    }
+    
+    printf("[Shutdown]: All child processes terminated\n");
     
     if (log_file) {
         fclose(log_file);
     }
     
     /* Cleanup IPC resources */
+    printf("[Shutdown]: Cleaning up IPC resources...\n");
     cleanup_shared_memory();
     cleanup_message_queue();
     cleanup_semaphore();
@@ -436,8 +575,37 @@ void handle_shutdown(int sig) {
     close(server_fd_global);
     pthread_mutex_destroy(&lock);
     
-    printf("\n[Server]: Shutdown complete. All IPC resources cleaned up.\n");
+    printf("\n╔════════════════════════════════════════════════════════════════╗\n");
+    printf("║         SHUTDOWN COMPLETE - ALL RESOURCES CLEANED UP         ║\n");
+    printf("╚════════════════════════════════════════════════════════════════╝\n\n");
     exit(0);
+}
+
+/* Handle child process termination */
+void handle_sigchld(int sig) {
+    (void)sig;
+    int status;
+    pid_t pid;
+    
+    /* Reap all terminated children */
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        /* Find and remove client from shared memory */
+        pthread_mutex_lock(&shm_buffer->shm_lock);
+        for (int i = 0; i < shm_buffer->client_count; i++) {
+            if (shm_buffer->clients[i].process_id == pid) {
+                /* Close the socket in parent */
+                close(shm_buffer->clients[i].fd);
+                
+                /* Remove this client by shifting others */
+                for (int j = i; j < shm_buffer->client_count - 1; j++) {
+                    shm_buffer->clients[j] = shm_buffer->clients[j + 1];
+                }
+                shm_buffer->client_count--;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&shm_buffer->shm_lock);
+    }
 }
 
 /* ========= PROCESS FORKING - Handle client in separate process ========= */
@@ -531,19 +699,19 @@ void handle_client_process(int client_fd) {
     send(client_fd, welcome, strlen(welcome), 0);
 
     /* Store user info */
-    pthread_mutex_lock(&lock);
-    for (int i = 0; i < client_count; i++) {
-        if (clients[i].fd == client_fd) {
-            strncpy(clients[i].username, username, sizeof(clients[i].username) - 1);
-            strncpy(clients[i].password, password, sizeof(clients[i].password) - 1);
-            clients[i].authenticated = 1;
-            strcpy(clients[i].room, "general");
-            clients[i].process_id = getpid();
+    pthread_mutex_lock(&shm_buffer->shm_lock);
+    for (int i = 0; i < shm_buffer->client_count; i++) {
+        if (shm_buffer->clients[i].fd == client_fd) {
+            strncpy(shm_buffer->clients[i].username, username, sizeof(shm_buffer->clients[i].username) - 1);
+            strncpy(shm_buffer->clients[i].password, password, sizeof(shm_buffer->clients[i].password) - 1);
+            shm_buffer->clients[i].authenticated = 1;
+            strcpy(shm_buffer->clients[i].room, "general");
+            shm_buffer->clients[i].process_id = getpid();
             client_index = i;
             break;
         }
     }
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&shm_buffer->shm_lock);
 
     /* Deliver queued messages */
     deliver_queued_messages(client_fd, username);
@@ -626,12 +794,12 @@ void handle_client_process(int client_fd) {
             room_str[strcspn(room_str, "\n")] = 0;
             
             if (strlen(room_str) > 0) {
-                pthread_mutex_lock(&lock);
+                pthread_mutex_lock(&shm_buffer->shm_lock);
                 if (client_index >= 0) {
                     char old_room[ROOM_NAME_LEN];
-                    strcpy(old_room, clients[client_index].room);
-                    strncpy(clients[client_index].room, room_str, ROOM_NAME_LEN - 1);
-                    pthread_mutex_unlock(&lock);
+                    strcpy(old_room, shm_buffer->clients[client_index].room);
+                    strncpy(shm_buffer->clients[client_index].room, room_str, ROOM_NAME_LEN - 1);
+                    pthread_mutex_unlock(&shm_buffer->shm_lock);
                     
                     /* Notify room left */
                     char leaving_msg[BUFFER_SIZE];
@@ -651,7 +819,7 @@ void handle_client_process(int client_fd) {
                         "[Server]: You are now in room #%s\n", room_str);
                     send(client_fd, confirm, strlen(confirm), 0);
                 } else {
-                    pthread_mutex_unlock(&lock);
+                    pthread_mutex_unlock(&shm_buffer->shm_lock);
                 }
             } else {
                 char *err = "[Server]: Room name cannot be empty.\n";
@@ -660,14 +828,14 @@ void handle_client_process(int client_fd) {
         }
         else if (strncmp(buffer, "/room", 5) == 0 && (buffer[5] == '\n' || buffer[5] == '\0')) {
             /* Show current room */
-            pthread_mutex_lock(&lock);
+            pthread_mutex_lock(&shm_buffer->shm_lock);
             char current_room[ROOM_NAME_LEN];
             if (client_index >= 0) {
-                strcpy(current_room, clients[client_index].room);
+                strcpy(current_room, shm_buffer->clients[client_index].room);
             } else {
                 strcpy(current_room, "unknown");
             }
-            pthread_mutex_unlock(&lock);
+            pthread_mutex_unlock(&shm_buffer->shm_lock);
             
             char response[BUFFER_SIZE];
             snprintf(response, sizeof(response), 
@@ -676,7 +844,7 @@ void handle_client_process(int client_fd) {
         }
         else if (strncmp(buffer, "/rooms", 6) == 0 && (buffer[6] == '\n' || buffer[6] == '\0')) {
             /* List all active rooms */
-            pthread_mutex_lock(&lock);
+            pthread_mutex_lock(&shm_buffer->shm_lock);
             char rooms_list[BUFFER_SIZE * 2];
             strcpy(rooms_list, "\n[Active Rooms]:\n");
             
@@ -685,23 +853,23 @@ void handle_client_process(int client_fd) {
             int room_counts[MAX_ROOMS] = {0};
             int room_count = 0;
             
-            for (int i = 0; i < client_count; i++) {
+            for (int i = 0; i < shm_buffer->client_count; i++) {
                 int found = 0;
                 for (int j = 0; j < room_count; j++) {
-                    if (strcmp(room_names[j], clients[i].room) == 0) {
+                    if (strcmp(room_names[j], shm_buffer->clients[i].room) == 0) {
                         room_counts[j]++;
                         found = 1;
                         break;
                     }
                 }
                 if (!found && room_count < MAX_ROOMS) {
-                    strcpy(room_names[room_count], clients[i].room);
+                    strcpy(room_names[room_count], shm_buffer->clients[i].room);
                     room_counts[room_count]++;
                     room_count++;
                 }
             }
             
-            pthread_mutex_unlock(&lock);
+            pthread_mutex_unlock(&shm_buffer->shm_lock);
             
             /* Display rooms */
             for (int i = 0; i < room_count; i++) {
@@ -719,10 +887,10 @@ void handle_client_process(int client_fd) {
         }
         else if (strncmp(buffer, "/users", 6) == 0 && (buffer[6] == '\n' || buffer[6] == '\0')) {
             /* List users in current room */
-            pthread_mutex_lock(&lock);
+            pthread_mutex_lock(&shm_buffer->shm_lock);
             char current_room[ROOM_NAME_LEN];
             if (client_index >= 0) {
-                strcpy(current_room, clients[client_index].room);
+                strcpy(current_room, shm_buffer->clients[client_index].room);
             } else {
                 strcpy(current_room, "general");
             }
@@ -731,16 +899,16 @@ void handle_client_process(int client_fd) {
             snprintf(users_list, sizeof(users_list), 
                 "\n[Users in #%s]:\n", current_room);
             
-            for (int i = 0; i < client_count; i++) {
-                if (strcmp(clients[i].room, current_room) == 0) {
+            for (int i = 0; i < shm_buffer->client_count; i++) {
+                if (strcmp(shm_buffer->clients[i].room, current_room) == 0) {
                     char user_info[BUFFER_SIZE];
                     snprintf(user_info, sizeof(user_info), 
-                        "  • %s\n", clients[i].username);
+                        "  • %s\n", shm_buffer->clients[i].username);
                     strcat(users_list, user_info);
                 }
             }
             
-            pthread_mutex_unlock(&lock);
+            pthread_mutex_unlock(&shm_buffer->shm_lock);
             
             strcat(users_list, "\n");
             send(client_fd, users_list, strlen(users_list), 0);
@@ -750,10 +918,10 @@ void handle_client_process(int client_fd) {
             char timestamp[20];
             get_timestamp(timestamp, sizeof(timestamp));
             
-            pthread_mutex_lock(&lock);
+            pthread_mutex_lock(&shm_buffer->shm_lock);
             char current_room[ROOM_NAME_LEN];
-            strcpy(current_room, clients[client_index].room);
-            pthread_mutex_unlock(&lock);
+            strcpy(current_room, shm_buffer->clients[client_index].room);
+            pthread_mutex_unlock(&shm_buffer->shm_lock);
             
             snprintf(message, sizeof(message), "%s [#%s] %s: %s", 
                      timestamp, current_room, username, buffer);
@@ -765,19 +933,19 @@ void handle_client_process(int client_fd) {
     }
 
     /* Cleanup */
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&shm_buffer->shm_lock);
     char leaving_user[50];
-    for (int i = 0; i < client_count; i++) {
-        if (clients[i].fd == client_fd) {
-            strncpy(leaving_user, clients[i].username, sizeof(leaving_user) - 1);
-            for (int j = i; j < client_count - 1; j++) {
-                clients[j] = clients[j + 1];
+    for (int i = 0; i < shm_buffer->client_count; i++) {
+        if (shm_buffer->clients[i].fd == client_fd) {
+            strncpy(leaving_user, shm_buffer->clients[i].username, sizeof(leaving_user) - 1);
+            for (int j = i; j < shm_buffer->client_count - 1; j++) {
+                shm_buffer->clients[j] = shm_buffer->clients[j + 1];
             }
-            client_count--;
+            shm_buffer->client_count--;
             break;
         }
     }
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&shm_buffer->shm_lock);
 
     snprintf(message, sizeof(message), "[Server]: %s has disconnected (Process: %d exiting)\n", leaving_user, getpid());
     printf("%s", message);
@@ -811,6 +979,12 @@ int main() {
     fflush(stdout);
     init_shared_memory();
     
+    /* Store parent PID in shared memory */
+    parent_pid_global = getpid();
+    pthread_mutex_lock(&shm_buffer->shm_lock);
+    shm_buffer->parent_pid = parent_pid_global;
+    pthread_mutex_unlock(&shm_buffer->shm_lock);
+    
     printf("[DEBUG] Calling init_message_queue()\n");
     fflush(stdout);
     init_message_queue();
@@ -819,9 +993,10 @@ int main() {
     fflush(stdout);
     init_semaphore();
 
-    /* Setup signal handler */
+    /* Setup signal handlers */
     signal(SIGINT, handle_shutdown);
-    signal(SIGCHLD, SIG_IGN);  // Prevent zombie processes
+    signal(SIGCHLD, handle_sigchld);  // Handle child termination
+    signal(SIGUSR1, handle_broadcast_signal);  // Handle broadcast requests from children
 
     server_fd_global = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd_global < 0) {
@@ -863,7 +1038,48 @@ int main() {
     printf("[DEBUG] Entering accept loop\n");
     fflush(stdout);
 
+    /* Set up signal mask for pselect */
+    sigset_t empty_mask, block_mask;
+    sigemptyset(&empty_mask);
+    sigemptyset(&block_mask);
+    sigaddset(&block_mask, SIGUSR1);  // Block SIGUSR1 except during pselect
+    sigprocmask(SIG_BLOCK, &block_mask, NULL);
+
     while (server_running) {
+        /* Process any pending broadcasts */
+        if (broadcast_pending) {
+            process_broadcasts();
+        }
+        
+        /* Use pselect() with timeout - atomically unblocks signals */
+        fd_set read_fds;
+        struct timespec timeout;
+        
+        FD_ZERO(&read_fds);
+        FD_SET(server_fd_global, &read_fds);
+        
+        timeout.tv_sec = 0;
+        timeout.tv_nsec = 100000000;  // 100ms timeout
+        
+        /* pselect atomically unblocks signals during wait */
+        int select_result = pselect(server_fd_global + 1, &read_fds, NULL, NULL, &timeout, &empty_mask);
+        
+        if (select_result < 0) {
+            if (errno == EINTR) {
+                /* Interrupted by signal - check if shutdown or broadcast */
+                if (!server_running) break;
+                continue;  // Process broadcasts on next iteration
+            }
+            perror("pselect failed");
+            continue;
+        }
+        
+        /* Timeout occurred - process broadcasts and continue */
+        if (select_result == 0) {
+            continue;
+        }
+        
+        /* Socket is ready - try to get semaphore */
         printf("[DEBUG] Waiting for semaphore...\n");
         fflush(stdout);
         
@@ -889,10 +1105,10 @@ int main() {
             continue;
         }
 
-        pthread_mutex_lock(&lock);
+        pthread_mutex_lock(&shm_buffer->shm_lock);
         
-        if (client_count >= MAX_CLIENTS) {
-            pthread_mutex_unlock(&lock);
+        if (shm_buffer->client_count >= MAX_CLIENTS) {
+            pthread_mutex_unlock(&shm_buffer->shm_lock);
             char *full_msg = "Server full. Try again later.\n";
             send(client_fd, full_msg, strlen(full_msg), 0);
             close(client_fd);
@@ -900,13 +1116,13 @@ int main() {
             continue;
         }
         
-        clients[client_count].fd = client_fd;
-        clients[client_count].authenticated = 0;
-        clients[client_count].process_id = 0;
-        strcpy(clients[client_count].room, "general");
-        client_count++;
+        shm_buffer->clients[shm_buffer->client_count].fd = client_fd;
+        shm_buffer->clients[shm_buffer->client_count].authenticated = 0;
+        shm_buffer->clients[shm_buffer->client_count].process_id = 0;
+        strcpy(shm_buffer->clients[shm_buffer->client_count].room, "general");
+        shm_buffer->client_count++;
         
-        pthread_mutex_unlock(&lock);
+        pthread_mutex_unlock(&shm_buffer->shm_lock);
 
         /* Fork a child process to handle client */
         pid = fork();
@@ -927,17 +1143,16 @@ int main() {
             printf("[Server]: Forked child process %d for new client\n", pid);
             
             /* Update client's process ID */
-            pthread_mutex_lock(&lock);
-            for (int i = 0; i < client_count; i++) {
-                if (clients[i].fd == client_fd) {
-                    clients[i].process_id = pid;
+            pthread_mutex_lock(&shm_buffer->shm_lock);
+            for (int i = 0; i < shm_buffer->client_count; i++) {
+                if (shm_buffer->clients[i].fd == client_fd) {
+                    shm_buffer->clients[i].process_id = pid;
                     break;
                 }
             }
-            pthread_mutex_unlock(&lock);
+            pthread_mutex_unlock(&shm_buffer->shm_lock);
             
-            /* Parent doesn't need client socket */
-            close(client_fd);
+            /* Parent keeps the socket open for broadcasting - child will close it when done */
             
             /* Release semaphore when child exits */
             sem_post(connection_sem);
