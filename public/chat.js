@@ -378,7 +378,7 @@ function updateRoomsList(rooms) {
                 <span>💬 ${room.messages}</span>
             </div>
         `;
-        roomEl.onclick = () => joinRoom(room.name);
+        roomEl.onclick = (e) => joinRoom(room.name, e.target);
         roomsList.appendChild(roomEl);
     });
 }
@@ -395,7 +395,7 @@ function updateRoomInfo(name, users, messageCount) {
     leaveRoomBtn.style.display = 'block';
 }
 
-function joinRoom(roomName) {
+function joinRoom(roomName, eventTarget = null) {
     if (currentRoom === roomName) return;
     
     currentRoom = roomName;
@@ -416,7 +416,14 @@ function joinRoom(roomName) {
     document.querySelectorAll('.room-item').forEach(el => {
         el.classList.remove('active');
     });
-    event.target.closest('.room-item').classList.add('active');
+    
+    // Only update active state if eventTarget is provided
+    if (eventTarget) {
+        const roomItem = eventTarget.closest('.room-item');
+        if (roomItem) {
+            roomItem.classList.add('active');
+        }
+    }
 
     console.log(`📌 Joined room: ${roomName}`);
 }
@@ -475,8 +482,9 @@ function updateUsersList() {
                     openPMChat(user.username);
                 };
 
-                // Apply unread badge if persisted count exists
-                if (unreadCounts[user.username] && unreadCounts[user.username] > 0) {
+                // Apply unread badge ONLY if persisted count exists and is greater than 0
+                const count = unreadCounts[user.username];
+                if (count && count > 0) {
                     pmBtn.classList.add('pm-unread');
                 }
             }
@@ -740,10 +748,8 @@ function openPMChat(username) {
         userBtn.classList.remove('pm-unread');
     }
     // Clear persisted unread count for this user
-    if (unreadCounts[username]) {
-        unreadCounts[username] = 0;
-        try { localStorage.setItem('netchat_unread', JSON.stringify(unreadCounts)); } catch (e) {}
-    }
+    delete unreadCounts[username];
+    try { localStorage.setItem('netchat_unread', JSON.stringify(unreadCounts)); } catch (e) {}
 }
 
 function closePMChat() {
@@ -1219,10 +1225,7 @@ encryptBtn.addEventListener('dblclick', (e) => {
     alert(helpText);
 });
 
-// Request notification permission
-if (Notification.permission === 'default') {
-    Notification.requestPermission();
-}
+// Notification permission will be requested on first user interaction (create/join room)
 
 // Periodically refresh rooms list
 setInterval(() => {
@@ -1230,34 +1233,3 @@ setInterval(() => {
 }, 5000);
 
 console.log('💬 Chat client initialized');
-
-// ===== PM Encryption Handlers =====
-if (pmEncryptBtn) {
-    // PM Encryption toggle
-    pmEncryptBtn.addEventListener('click', () => {
-        isPMEncryptionEnabled = !isPMEncryptionEnabled;
-        
-        if (isPMEncryptionEnabled) {
-            pmEncryptBtn.textContent = '????';
-            pmEncryptBtn.title = 'PM Encryption ON - Messages are encrypted. Click to disable.';
-            pmEncryptBtn.classList.add('active');
-            showToast('???? PM Encryption ENABLED\n\nYour private messages will be encrypted.', 4000);
-        } else {
-            pmEncryptBtn.textContent = '????';
-            pmEncryptBtn.title = 'PM Encryption OFF - Messages sent as plain text. Click to enable.';
-            pmEncryptBtn.classList.remove('active');
-            showToast('???? PM Encryption DISABLED', 2000);
-        }
-    });
-
-    // PM Encryption double-click help
-    pmEncryptBtn.addEventListener('dblclick', (e) => {
-        e.preventDefault();
-        const helpText = `???? PRIVATE MESSAGE ENCRYPTION\n\n` +
-            `This encrypts YOUR private messages to a specific user.\n` +
-            `Uses AES-256-CBC encryption algorithm.\n\n` +
-            `???? = Encryption ON\n` +
-            `???? = Encryption OFF`;
-        alert(helpText);
-    });
-}

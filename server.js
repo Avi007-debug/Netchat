@@ -78,6 +78,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Favicon handler to prevent 404 errors
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // Create uploads directory if it doesn't exist
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
